@@ -42,8 +42,7 @@ class CryptoDataError(Exception):
         super().__init__(f"{kind}: {detail}" if detail else kind)
 
 
-def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180,
-                     max_retries: int = 3) -> pd.DataFrame:
+def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180, max_retries: int = 3) -> pd.DataFrame:
     """Busca o histórico diário de preço/volume de uma criptomoeda.
 
     Retorna um DataFrame com uma linha por dia (colunas `date`,
@@ -57,10 +56,10 @@ def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180,
       - respostas malformadas / dados nulos.
     """
     coin_id = COIN_OPTIONS.get(coin_name, "bitcoin")
-    params = {"vs_currency": "usd", "days": days, "interval": "daily"}
+    params: dict[str, str | int] = {"vs_currency": "usd", "days": days, "interval": "daily"}
     url = COINGECKO_URL.format(coin_id=coin_id)
 
-    headers = {}
+    headers: dict[str, str] = {}
     api_key = get_coingecko_api_key()
     if api_key:
         headers["x-cg-demo-api-key"] = api_key
@@ -73,7 +72,7 @@ def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180,
             if resp.status_code == 429:
                 last_error = CryptoDataError("rate_limit")
                 logger.warning("CoinGecko: rate limit (tentativa %d/%d)", attempt + 1, max_retries)
-                time.sleep(2 ** attempt)  # backoff exponencial: 1s, 2s, 4s...
+                time.sleep(2**attempt)  # backoff exponencial: 1s, 2s, 4s...
                 continue
 
             resp.raise_for_status()
@@ -115,11 +114,7 @@ def _parse_market_chart(payload: dict) -> pd.DataFrame:
         raise CryptoDataError("empty_response")
 
     df["date"] = pd.to_datetime(df["timestamp"], unit="ms").dt.normalize()
-    df = (
-        df.sort_values("timestamp")
-        .drop_duplicates(subset="date", keep="last")
-        .drop(columns=["timestamp"])
-    )
+    df = df.sort_values("timestamp").drop_duplicates(subset="date", keep="last").drop(columns=["timestamp"])
 
     try:
         df = validate(df, CRYPTO_SCHEMA, source="cotações")

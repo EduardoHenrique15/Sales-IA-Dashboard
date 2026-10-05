@@ -21,6 +21,6 @@ def setup_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
     logger.addHandler(handler)
-    level = getattr(logging, get_setting("LOG_LEVEL", "INFO").upper(), None)
+    level = getattr(logging, (get_setting("LOG_LEVEL") or "INFO").upper(), None)
     logger.setLevel(level if isinstance(level, int) else logging.INFO)
     logger.propagate = False

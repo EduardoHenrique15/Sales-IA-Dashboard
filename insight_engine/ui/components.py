@@ -24,8 +24,10 @@ def kpi_card(label: str, value: str, delta: str | None = None, delta_positive: b
     delta_html = ""
     if delta:
         css_class = (
-            "kpi-delta-up" if delta_positive is True
-            else "kpi-delta-down" if delta_positive is False
+            "kpi-delta-up"
+            if delta_positive is True
+            else "kpi-delta-down"
+            if delta_positive is False
             else "kpi-delta-neutral"
         )
         delta_html = f'<div class="{css_class}">{html.escape(delta)}</div>'
@@ -92,4 +94,6 @@ def report_section(df: pd.DataFrame, kpis: SalesKPIs | CryptoKPIs, period_label:
 
 def footer() -> None:
     st.divider()
-    st.caption("Insight Engine • Projeto de portfólio — Streamlit + Pandas + Plotly + IA (Gemini / scikit-learn fallback)")
+    st.caption(
+        "Insight Engine • Projeto de portfólio — Streamlit + Pandas + Plotly + IA (Gemini / scikit-learn fallback)"
+    )

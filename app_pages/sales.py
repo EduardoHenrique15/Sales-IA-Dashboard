@@ -49,13 +49,18 @@ else:
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         kpi_card(
-            "Receita Total", format_brl(kpis.total_revenue),
+            "Receita Total",
+            format_brl(kpis.total_revenue),
             delta=f"{format_pct(growth, signed=True)} vs período anterior" if growth is not None else None,
             delta_positive=growth >= 0 if growth is not None else None,
         )
     with c2:
-        kpi_card("Lucro Total", format_brl(kpis.total_profit), f"Margem: {format_pct(kpis.margin_pct)}",
-                 delta_positive=kpis.margin_pct >= 20)
+        kpi_card(
+            "Lucro Total",
+            format_brl(kpis.total_profit),
+            f"Margem: {format_pct(kpis.margin_pct)}",
+            delta_positive=kpis.margin_pct >= 20,
+        )
     with c3:
         kpi_card("Unidades Vendidas", format_number(kpis.total_units))
     with c4:

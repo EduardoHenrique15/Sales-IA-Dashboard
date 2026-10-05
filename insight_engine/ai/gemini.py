@@ -19,6 +19,7 @@ try:
     from google import genai
     from google.genai import errors as genai_errors
     from google.genai import types as genai_types
+
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
@@ -34,7 +35,7 @@ def generate(prompt: str, api_key: str) -> str:
     """Envia `prompt` ao Gemini e devolve o texto gerado."""
     client = genai.Client(api_key=api_key)
 
-    last_exc = None
+    last_exc: Exception = GeminiError("Nenhum modelo do Gemini configurado")
     for model in configured_models():
         try:
             text = _call_model(client, model, prompt)
@@ -66,10 +67,7 @@ def describe_error(exc: Exception) -> str:
     if code in (400, 401, 403):
         return "a chave do Gemini é inválida ou não tem permissão de acesso."
     if code == 429:
-        return (
-            "a cota da API do Gemini foi esgotada (inclusive no modelo reserva). "
-            "Tente novamente em alguns minutos."
-        )
+        return "a cota da API do Gemini foi esgotada (inclusive no modelo reserva). Tente novamente em alguns minutos."
     if code is not None and code >= 500:
         return (
             "o serviço do Gemini está instável ou sobrecarregado no momento, "

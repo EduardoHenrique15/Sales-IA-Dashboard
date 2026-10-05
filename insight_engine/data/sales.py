@@ -33,8 +33,11 @@ PRODUCTS_BY_CATEGORY = {
 }
 
 BASE_PRICE = {
-    "Eletrônicos": 1800, "Moda": 140, "Casa & Decoração": 320,
-    "Alimentos": 60, "Beleza": 95,
+    "Eletrônicos": 1800,
+    "Moda": 140,
+    "Casa & Decoração": 320,
+    "Alimentos": 60,
+    "Beleza": 95,
 }
 
 # Fator de desempenho relativo de cada região (mercado)
@@ -68,14 +71,14 @@ def load_sales_data() -> pd.DataFrame:
     return df.sort_values("date").reset_index(drop=True)
 
 
-def _generate_synthetic_sales(start_date: str = SALES_START_DATE,
-                              end_date: str = SALES_END_DATE,
-                              seed: int = SALES_SEED) -> pd.DataFrame:
+def _generate_synthetic_sales(
+    start_date: str = SALES_START_DATE, end_date: str = SALES_END_DATE, seed: int = SALES_SEED
+) -> pd.DataFrame:
     """Gera uma base de vendas diária realista, com:
-       - tendência de crescimento geral,
-       - sazonalidade semanal e mensal,
-       - uma categoria em declínio (gargalo proposital),
-       - ruído aleatório controlado (reprodutível via seed).
+    - tendência de crescimento geral,
+    - sazonalidade semanal e mensal,
+    - uma categoria em declínio (gargalo proposital),
+    - ruído aleatório controlado (reprodutível via seed).
     """
     rng = np.random.default_rng(seed)
     region_probs = _region_probabilities()
@@ -117,16 +120,18 @@ def _generate_synthetic_sales(start_date: str = SALES_START_DATE,
             revenue = unit_price * units * REGION_WEIGHT[region] * decline_penalty
             cost_total = cost * units
 
-            rows.append({
-                "date": date,
-                "category": category,
-                "region": region,
-                "product": product,
-                "units": units,
-                "unit_price": round(unit_price, 2),
-                "revenue": round(max(revenue, 0), 2),
-                "cost": round(max(cost_total, 0), 2),
-            })
+            rows.append(
+                {
+                    "date": date,
+                    "category": category,
+                    "region": region,
+                    "product": product,
+                    "units": units,
+                    "unit_price": round(unit_price, 2),
+                    "revenue": round(max(revenue, 0), 2),
+                    "cost": round(max(cost_total, 0), 2),
+                }
+            )
 
     df = pd.DataFrame(rows)
     df["profit"] = (df["revenue"] - df["cost"]).round(2)

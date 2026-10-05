@@ -16,7 +16,8 @@ def build_prompt(kpis: SalesKPIs | CryptoKPIs, period_label: str, dataset_name: 
     """Monta o prompt do relatório executivo a partir dos KPIs já calculados."""
     if isinstance(kpis, SalesKPIs):
         growth_txt = (
-            format_pct(kpis.revenue_growth_pct, signed=True) if kpis.revenue_growth_pct is not None
+            format_pct(kpis.revenue_growth_pct, signed=True)
+            if kpis.revenue_growth_pct is not None
             else "não disponível (sem período anterior comparável)"
         )
         kpi_block = f"""

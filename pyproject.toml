@@ -1,0 +1,67 @@
+[project]
+name = "insight-engine"
+version = "0.3.0"
+description = "Dashboard executivo de vendas com KPIs, gráficos interativos e relatórios gerados por IA."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+# Dependências diretas, com versões mínimas. As versões exatas usadas no
+# deploy ficam travadas em requirements.txt (gerado a partir daqui).
+dependencies = [
+    "streamlit>=1.40",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "plotly>=5.22",
+    "scikit-learn>=1.5",
+    "requests>=2.32",
+    "google-genai>=1.0",
+    "python-dotenv>=1.0.1",
+    "pandera>=0.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-requests",
+]
+
+# ------------------------------------------------------------------
+# Ferramentas
+# ------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["insight_engine"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # ordem dos imports
+    "B",       # bugbear (bugs comuns)
+    "UP",      # sintaxe moderna do Python
+    "SIM",     # simplificações
+]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["insight_engine"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true

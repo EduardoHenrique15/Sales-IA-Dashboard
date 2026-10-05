@@ -43,17 +43,23 @@ else:
     high_volatility = kpis.volatility_pct > HIGH_VOLATILITY_PCT
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        kpi_card("Preço Atual", format_usd(kpis.current_price),
-                 f"{format_pct(kpis.period_change_pct, 2, signed=True)} no período",
-                 delta_positive=kpis.period_change_pct >= 0)
+        kpi_card(
+            "Preço Atual",
+            format_usd(kpis.current_price),
+            f"{format_pct(kpis.period_change_pct, 2, signed=True)} no período",
+            delta_positive=kpis.period_change_pct >= 0,
+        )
     with c2:
         kpi_card("Máxima do Período", format_usd(kpis.max_price))
     with c3:
         kpi_card("Mínima do Período", format_usd(kpis.min_price))
     with c4:
-        kpi_card("Volatilidade Diária", format_pct(kpis.volatility_pct, 2),
-                 "Alta" if high_volatility else "Moderada",
-                 delta_positive=not high_volatility)
+        kpi_card(
+            "Volatilidade Diária",
+            format_pct(kpis.volatility_pct, 2),
+            "Alta" if high_volatility else "Moderada",
+            delta_positive=not high_volatility,
+        )
 
     st.write("")
 

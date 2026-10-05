@@ -28,6 +28,10 @@ DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
 
 def get_setting(name: str, default: str | None = None) -> str | None:
     """Busca uma configuração em `st.secrets` e, depois, no ambiente."""
+    return _from_streamlit_secrets(name) or os.environ.get(name) or default
+
+
+def _from_streamlit_secrets(name: str) -> str | None:
     try:
         import streamlit as st
 
@@ -37,8 +41,7 @@ def get_setting(name: str, default: str | None = None) -> str | None:
                 return str(value)
     except Exception:  # noqa: BLE001 - sem secrets.toml ou fora do Streamlit
         pass
-
-    return os.environ.get(name) or default
+    return None
 
 
 def get_gemini_api_key() -> str | None:
@@ -46,11 +49,11 @@ def get_gemini_api_key() -> str | None:
 
 
 def get_gemini_model() -> str:
-    return get_setting("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+    return get_setting("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
 
 
 def get_gemini_fallback_model() -> str:
-    return get_setting("GEMINI_FALLBACK_MODEL", DEFAULT_GEMINI_FALLBACK_MODEL)
+    return get_setting("GEMINI_FALLBACK_MODEL") or DEFAULT_GEMINI_FALLBACK_MODEL
 
 
 def get_coingecko_api_key() -> str | None:

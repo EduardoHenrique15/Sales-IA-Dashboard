@@ -24,10 +24,12 @@ st.set_page_config(
 setup_logging()
 inject_css()
 
-page = st.navigation([
-    st.Page("app_pages/sales.py", title="Vendas", icon="📦", url_path="vendas", default=True),
-    st.Page("app_pages/crypto.py", title="Criptomoedas", icon="🪙", url_path="criptomoedas"),
-])
+page = st.navigation(
+    [
+        st.Page("app_pages/sales.py", title="Vendas", icon="📦", url_path="vendas", default=True),
+        st.Page("app_pages/crypto.py", title="Criptomoedas", icon="🪙", url_path="criptomoedas"),
+    ]
+)
 
 # ---------- BARRA LATERAL COMUM A TODAS AS PÁGINAS ----------
 st.sidebar.title("📊 Insight Engine")
@@ -37,7 +39,7 @@ st.sidebar.text_input(
     type="password",
     key=GEMINI_KEY_STATE,
     help="Se vazio, usa a chave configurada no servidor; sem nenhuma chave, o relatório "
-         "executivo é gerado pelo motor estatístico local (scikit-learn), sem custo.",
+    "executivo é gerado pelo motor estatístico local (scikit-learn), sem custo.",
 )
 st.sidebar.divider()
 
