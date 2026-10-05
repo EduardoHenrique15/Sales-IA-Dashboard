@@ -27,21 +27,27 @@ de uma API terceira quebrar a experiência do usuário.
 
 from __future__ import annotations
 
-import os
+import logging
 import time
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
+from config import get_gemini_api_key, get_gemini_fallback_model, get_gemini_model
+from formatting import format_brl, format_number, format_pct, format_usd
+
 # A dependência do Gemini é opcional: se o pacote não estiver instalado,
 # o agente simplesmente cai direto no fallback estatístico.
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import errors as genai_errors
+    from google.genai import types as genai_types
     _GENAI_AVAILABLE = True
 except ImportError:
     _GENAI_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 class AIAgentError(Exception):
@@ -57,83 +63,148 @@ def generate_executive_summary(
     period_label: str,
     dataset_name: str = "Vendas",
     api_key: str | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, str | None]:
     """Gera o Relatório Executivo em Markdown.
 
-    Retorna uma tupla (markdown_text, source), onde `source` é
-    "gemini" ou "fallback_estatistico" — usado pelo app para
-    exibir um selo indicando qual "motor" gerou o texto.
+    Retorna uma tupla (markdown_text, source, fallback_reason):
+      - `source` é "gemini" ou "fallback_estatistico", usado pelo app
+        para exibir um selo indicando qual "motor" gerou o texto;
+      - `fallback_reason` explica por que o Gemini não foi usado
+        quando havia uma chave configurada (None nos demais casos).
     """
-    api_key = api_key or os.environ.get("GEMINI_API_KEY")
+    api_key = api_key or get_gemini_api_key()
 
     if df.empty:
-        return _no_data_report(period_label, dataset_name), "fallback_estatistico"
+        return _no_data_report(period_label, dataset_name), "fallback_estatistico", None
 
+    fallback_reason = None
     if api_key and _GENAI_AVAILABLE:
         try:
             report = _generate_with_gemini(df, kpis, period_label, dataset_name, api_key)
-            return report, "gemini"
+            return report, "gemini", None
         except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer falha da API
             # Não propaga o erro para a UI: registra e cai no fallback.
-            print(f"[ai_agent] Falha na API Gemini, usando fallback. Detalhe: {exc}")
+            logger.warning("Falha na API Gemini, usando fallback. Detalhe: %s", exc)
+            fallback_reason = _describe_gemini_error(exc)
+    elif api_key:
+        fallback_reason = "o pacote `google-genai` não está instalado."
 
     report = _generate_fallback_report(df, kpis, period_label, dataset_name)
-    return report, "fallback_estatistico"
+    return report, "fallback_estatistico", fallback_reason
+
+
+def _describe_gemini_error(exc: Exception) -> str:
+    """Traduz uma falha do Gemini em uma mensagem curta para a interface."""
+    code = getattr(exc, "code", None)
+    if code == 404:
+        models = ", ".join(f"`{m}`" for m in _gemini_models())
+        return (
+            f"nenhum dos modelos configurados ({models}) está disponível para esta chave. "
+            "Ajuste as configurações `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`."
+        )
+    if code in (400, 401, 403):
+        return "a chave do Gemini é inválida ou não tem permissão de acesso."
+    if code == 429:
+        return (
+            "a cota da API do Gemini foi esgotada (inclusive no modelo reserva). "
+            "Tente novamente em alguns minutos."
+        )
+    if code is not None and code >= 500:
+        return (
+            "o serviço do Gemini está instável ou sobrecarregado no momento, "
+            "inclusive no modelo reserva. Tente novamente em alguns minutos."
+        )
+    return "erro inesperado na chamada ao Gemini (detalhes no log do servidor)."
 
 
 # ==================================================================
 # CAMADA 1: GEMINI API
 # ==================================================================
-def _generate_with_gemini(df, kpis, period_label, dataset_name, api_key, max_retries: int = 2) -> str:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-
+def _generate_with_gemini(df, kpis, period_label, dataset_name, api_key) -> str:
+    """Tenta o modelo principal e, se ele estiver indisponível, sobrecarregado
+    ou sem cota, tenta o modelo reserva antes de desistir."""
+    client = genai.Client(api_key=api_key)
     prompt = _build_prompt(kpis, period_label, dataset_name)
 
-    last_exception = None
+    last_exc = None
+    for model in _gemini_models():
+        try:
+            return _call_gemini_model(client, model, prompt)
+        except genai_errors.APIError as exc:
+            if not _can_try_other_model(exc):
+                raise
+            logger.warning("Modelo %s falhou (%s); tentando o próximo.", model, exc.code)
+            last_exc = exc
+
+    raise last_exc
+
+
+def _gemini_models() -> list[str]:
+    models = [get_gemini_model(), get_gemini_fallback_model()]
+    return list(dict.fromkeys(m for m in models if m))  # sem repetidos, na ordem
+
+
+def _is_transient(exc: Exception) -> bool:
+    """429 = cota/rate limit; 5xx = instabilidade temporária do serviço."""
+    code = getattr(exc, "code", None) or 0
+    return code == 429 or code >= 500
+
+
+def _can_try_other_model(exc: Exception) -> bool:
+    # 404 = modelo indisponível para esta chave
+    return _is_transient(exc) or getattr(exc, "code", None) == 404
+
+
+def _call_gemini_model(client, model: str, prompt: str, max_retries: int = 2) -> str:
     for attempt in range(max_retries + 1):
         try:
-            response = model.generate_content(prompt)
-            text = (response.text or "").strip()
-            if not text:
-                raise AIAgentError("Resposta vazia da API Gemini")
-            return text
-        except Exception as exc:  # noqa: BLE001
-            last_exception = exc
-            error_str = str(exc).lower()
-            is_rate_limit = "429" in error_str or "quota" in error_str or "resource_exhausted" in error_str
-            if is_rate_limit and attempt < max_retries:
-                time.sleep(2 ** attempt)  # backoff exponencial
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                # O agente não usa ferramentas; desligar a chamada automática
+                # de funções (AFC) também evita um aviso da biblioteca.
+                config=genai_types.GenerateContentConfig(
+                    automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+                ),
+            )
+        except genai_errors.APIError as exc:
+            if _is_transient(exc) and attempt < max_retries:
+                time.sleep(2 ** (attempt + 1))  # backoff exponencial: 2s, 4s
                 continue
             raise
 
-    raise last_exception  # pragma: no cover
+        text = (response.text or "").strip()
+        if not text:
+            raise AIAgentError("Resposta vazia da API Gemini")
+        return text
+
+    raise AIAgentError("Número máximo de tentativas excedido")  # pragma: no cover
 
 
 def _build_prompt(kpis: dict, period_label: str, dataset_name: str) -> str:
     if dataset_name == "Vendas":
         growth_txt = (
-            f"{kpis['revenue_growth_pct']:.1f}%" if kpis.get("revenue_growth_pct") is not None
+            format_pct(kpis['revenue_growth_pct'], signed=True) if kpis.get("revenue_growth_pct") is not None
             else "não disponível (sem período anterior comparável)"
         )
         kpi_block = f"""
-- Receita total: R$ {kpis['total_revenue']:,.2f}
-- Lucro total: R$ {kpis['total_profit']:,.2f}
-- Margem de lucro: {kpis['margin_pct']:.1f}%
-- Unidades vendidas: {kpis['total_units']}
-- Ticket médio: R$ {kpis['avg_ticket']:,.2f}
-- Categoria líder: {kpis['top_category']} (R$ {kpis['top_category_revenue']:,.2f})
+- Receita total: {format_brl(kpis['total_revenue'])}
+- Lucro total: {format_brl(kpis['total_profit'])}
+- Margem de lucro: {format_pct(kpis['margin_pct'])}
+- Unidades vendidas: {format_number(kpis['total_units'])}
+- Ticket médio: {format_brl(kpis['avg_ticket'])}
+- Categoria líder: {kpis['top_category']} ({format_brl(kpis['top_category_revenue'])})
 - Região líder: {kpis['top_region']}
 - Crescimento da receita vs período anterior: {growth_txt}
 """.strip()
     else:
         kpi_block = f"""
-- Preço atual: US$ {kpis['current_price']:,.2f}
-- Variação no período: {kpis['period_change_pct']:.2f}%
-- Máxima do período: US$ {kpis['max_price']:,.2f}
-- Mínima do período: US$ {kpis['min_price']:,.2f}
-- Volume médio negociado: US$ {kpis['avg_volume']:,.0f}
-- Volatilidade diária (desvio padrão dos retornos): {kpis['volatility_pct']:.2f}%
+- Preço atual: {format_usd(kpis['current_price'])}
+- Variação no período: {format_pct(kpis['period_change_pct'], 2, signed=True)}
+- Máxima do período: {format_usd(kpis['max_price'])}
+- Mínima do período: {format_usd(kpis['min_price'])}
+- Volume médio negociado: {format_usd(kpis['avg_volume'], 0)}
+- Volatilidade diária (desvio padrão dos retornos): {format_pct(kpis['volatility_pct'], 2)}
 """.strip()
 
     return f"""
@@ -197,7 +268,7 @@ def _fallback_sales_report(df: pd.DataFrame, kpis: dict, period_label: str) -> s
     confidence = "alta" if r2 > 0.5 else ("moderada" if r2 > 0.2 else "baixa")
 
     growth_txt = (
-        f"{kpis['revenue_growth_pct']:+.1f}% em relação ao período anterior"
+        f"{format_pct(kpis['revenue_growth_pct'], signed=True)} em relação ao período anterior"
         if kpis.get("revenue_growth_pct") is not None
         else "sem dado comparativo de período anterior disponível"
     )
@@ -222,12 +293,11 @@ def _fallback_sales_report(df: pd.DataFrame, kpis: dict, period_label: str) -> s
                 declining_categories.append((cat, (v2 - v1) / v1 * 100))
 
     declining_txt = (
-        "; ".join(f"**{cat}** ({pct:.0f}%)" for cat, pct in declining_categories)
+        "; ".join(f"**{cat}** ({format_pct(pct, 0)})" for cat, pct in declining_categories)
         if declining_categories else "nenhuma categoria com queda relevante (>15%) identificada"
     )
 
     low_margin_flag = kpis["margin_pct"] < 20
-    ticket_flag = kpis["avg_ticket"] < (kpis["total_revenue"] / max(kpis["n_orders"], 1)) * 0.01  # placeholder seguro
 
     action_items = [
         f"Priorizar investimento em **{best_category}**, categoria líder de receita, para sustentar o momentum.",
@@ -240,7 +310,7 @@ def _fallback_sales_report(df: pd.DataFrame, kpis: dict, period_label: str) -> s
         )
     if low_margin_flag:
         action_items.append(
-            f"Reavaliar política de custos/precificação: margem atual de {kpis['margin_pct']:.1f}% está "
+            f"Reavaliar política de custos/precificação: margem atual de {format_pct(kpis['margin_pct'])} está "
             "abaixo do saudável para o setor (referência: 20-30%)."
         )
     action_items.append(
@@ -255,12 +325,12 @@ def _fallback_sales_report(df: pd.DataFrame, kpis: dict, period_label: str) -> s
 
     return f"""## Destaques do Período
 
-No período analisado ({period_label}), a receita total somou **R$ {kpis['total_revenue']:,.2f}**, \
-com lucro de **R$ {kpis['total_profit']:,.2f}** (margem de {kpis['margin_pct']:.1f}%). \
-Foram registrados **{kpis['n_orders']} pedidos**, totalizando {kpis['total_units']} unidades vendidas, \
-com ticket médio de **R$ {kpis['avg_ticket']:,.2f}**. A análise de tendência (regressão linear sobre a \
+No período analisado ({period_label}), a receita total somou **{format_brl(kpis['total_revenue'])}**, \
+com lucro de **{format_brl(kpis['total_profit'])}** (margem de {format_pct(kpis['margin_pct'])}). \
+Foram registrados **{format_number(kpis['n_orders'])} pedidos**, totalizando {format_number(kpis['total_units'])} unidades vendidas, \
+com ticket médio de **{format_brl(kpis['avg_ticket'])}**. A análise de tendência (regressão linear sobre a \
 série diária de receita, confiança {confidence}) aponta **{trend_word}** de aproximadamente \
-**{trend_pct:+.1f}%** ao longo do período, com variação de {growth_txt}. \
+**{format_pct(trend_pct, signed=True)}** ao longo do período, com variação de {growth_txt}. \
 A categoria **{best_category}** lidera em receita, e a região **{kpis['top_region']}** é a de maior \
 representatividade comercial.
 
@@ -268,7 +338,7 @@ representatividade comercial.
 
 - **Categorias em queda:** {declining_txt}, comparando a primeira e a segunda metade do período selecionado.
 - **Categoria de menor receita:** **{worst_category}**, candidata a revisão de estratégia comercial ou descontinuação.
-- **Margem de lucro:** {"abaixo do ideal (" + f"{kpis['margin_pct']:.1f}%" + "), sinalizando pressão de custos ou descontos agressivos." if low_margin_flag else f"saudável, em {kpis['margin_pct']:.1f}%, indicando controle de custos eficiente."}
+- **Margem de lucro:** {"abaixo do ideal (" + f"{format_pct(kpis['margin_pct'])}" + "), sinalizando pressão de custos ou descontos agressivos." if low_margin_flag else f"saudável, em {format_pct(kpis['margin_pct'])}, indicando controle de custos eficiente."}
 - **Concentração regional:** a receita está fortemente ligada à região {kpis['top_region']}, o que representa risco de dependência caso o mercado local sofra retração.
 
 ## Plano de Ação Estratégico Sugerido
@@ -293,25 +363,25 @@ def _fallback_crypto_report(df: pd.DataFrame, kpis: dict, period_label: str) -> 
         "Reforçar disciplina de gestão de risco (stop-loss / dimensionamento de posição) dado o nível de volatilidade observado."
         if volatility_flag else
         "Manter monitoramento de volatilidade; nível atual está dentro de faixas historicamente administráveis.",
-        f"Acompanhar de perto o comportamento em torno da máxima do período (US$ {kpis['max_price']:,.2f}) como possível resistência técnica.",
-        f"Considerar a mínima do período (US$ {kpis['min_price']:,.2f}) como referência de suporte para decisões de entrada.",
+        f"Acompanhar de perto o comportamento em torno da máxima do período ({format_usd(kpis['max_price'])}) como possível resistência técnica.",
+        f"Considerar a mínima do período ({format_usd(kpis['min_price'])}) como referência de suporte para decisões de entrada.",
         "Cruzar esta análise de preço com indicadores on-chain e volume para confirmar a força da tendência antes de decisões relevantes.",
     ]
     action_md = "\n".join(f"{i+1}. {item}" for i, item in enumerate(action_items))
 
     return f"""## Destaques do Período
 
-No período analisado ({period_label}), o ativo apresentou variação de **{kpis['period_change_pct']:+.2f}%**, \
-encerrando a **US$ {kpis['current_price']:,.2f}**. A regressão linear sobre a série de preços (confiança \
-{confidence}) indica tendência de **{trend_word}**, com inclinação equivalente a {trend_pct:+.1f}% no período. \
-A máxima registrada foi **US$ {kpis['max_price']:,.2f}** e a mínima **US$ {kpis['min_price']:,.2f}**, com \
-volume médio negociado de **US$ {kpis['avg_volume']:,.0f}**.
+No período analisado ({period_label}), o ativo apresentou variação de **{format_pct(kpis['period_change_pct'], 2, signed=True)}**, \
+encerrando a **{format_usd(kpis['current_price'])}**. A regressão linear sobre a série de preços (confiança \
+{confidence}) indica tendência de **{trend_word}**, com inclinação equivalente a {format_pct(trend_pct, signed=True)} no período. \
+A máxima registrada foi **{format_usd(kpis['max_price'])}** e a mínima **{format_usd(kpis['min_price'])}**, com \
+volume médio negociado de **{format_usd(kpis['avg_volume'], 0)}**.
 
 ## Diagnóstico de Pontos Críticos / Gargalos
 
-- **Volatilidade diária:** {kpis['volatility_pct']:.2f}% ({"elevada, exigindo cautela redobrada" if volatility_flag else "dentro de patamares administráveis"}).
-- **Distância da máxima:** o preço atual está {abs(drawdown_pct):.1f}% {"abaixo" if drawdown_pct < 0 else "acima"} da máxima do período, indicando {"possível correção em curso" if drawdown_pct < -10 else "proximidade de topo histórico recente"}.
-- **Confiança da tendência (R²):** {r2:.2f} — {"tendência bem definida" if r2 > 0.5 else "sinal de tendência fraco, mercado possivelmente em consolidação"}.
+- **Volatilidade diária:** {format_pct(kpis['volatility_pct'], 2)} ({"elevada, exigindo cautela redobrada" if volatility_flag else "dentro de patamares administráveis"}).
+- **Distância da máxima:** o preço atual está {format_pct(abs(drawdown_pct))} {"abaixo" if drawdown_pct < 0 else "acima"} da máxima do período, indicando {"possível correção em curso" if drawdown_pct < -10 else "proximidade de topo histórico recente"}.
+- **Confiança da tendência (R²):** {format_number(r2, 2)} — {"tendência bem definida" if r2 > 0.5 else "sinal de tendência fraco, mercado possivelmente em consolidação"}.
 
 ## Plano de Ação Estratégico Sugerido
 

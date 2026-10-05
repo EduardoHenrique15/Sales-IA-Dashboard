@@ -21,7 +21,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ai_agent import generate_executive_summary
-from data_loader import COIN_OPTIONS, load_crypto_data, load_sales_data
+from data_loader import COIN_OPTIONS, CryptoDataError, load_crypto_data, load_sales_data
+from formatting import PLOTLY_SEPARATORS, format_brl, format_number, format_pct, format_usd
 from kpi_engine import compute_crypto_kpis, compute_sales_kpis, previous_period_df
 
 # ==================================================================
@@ -86,8 +87,10 @@ def _cached_sales_data():
     return load_sales_data()
 
 
+# Só respostas bem-sucedidas entram no cache: em caso de falha,
+# `load_crypto_data` levanta exceção, e o Streamlit não guarda exceções.
 @st.cache_data(show_spinner="Consumindo API de cotações em tempo real...", ttl=600)
-def _cached_crypto_data(coin_name: str, days: int):
+def _cached_crypto_data(coin_name: str, days: int) -> pd.DataFrame:
     return load_crypto_data(coin_name, days)
 
 
@@ -183,7 +186,7 @@ if dataset_choice == "Vendas":
 
     # ---------- HEADER ----------
     st.title("📊 Dashboard Executivo de Vendas")
-    st.caption(f"Período selecionado: **{period_label}**  •  {kpis['n_orders']} pedidos analisados")
+    st.caption(f"Período selecionado: **{period_label}**  •  {format_number(kpis['n_orders'])} pedidos analisados")
 
     if df_filtered.empty:
         st.warning("⚠️ Nenhum dado encontrado para os filtros selecionados. Ajuste o período ou os filtros.")
@@ -191,18 +194,18 @@ if dataset_choice == "Vendas":
         # ---------- KPI CARDS ----------
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            kpi_card("Receita Total", f"R$ {kpis['total_revenue']:,.2f}",
-                      delta=f"{kpis['revenue_growth_pct']:+.1f}% vs período anterior" if kpis['revenue_growth_pct'] is not None else None,
+            kpi_card("Receita Total", format_brl(kpis['total_revenue']),
+                      delta=f"{format_pct(kpis['revenue_growth_pct'], signed=True)} vs período anterior" if kpis['revenue_growth_pct'] is not None else None,
                       delta_positive=(kpis['revenue_growth_pct'] or 0) >= 0 if kpis['revenue_growth_pct'] is not None else None)
         with c2:
-            kpi_card("Lucro Total", f"R$ {kpis['total_profit']:,.2f}", f"Margem: {kpis['margin_pct']:.1f}%",
+            kpi_card("Lucro Total", format_brl(kpis['total_profit']), f"Margem: {format_pct(kpis['margin_pct'])}",
                       delta_positive=kpis['margin_pct'] >= 20)
         with c3:
-            kpi_card("Unidades Vendidas", f"{kpis['total_units']:,}")
+            kpi_card("Unidades Vendidas", format_number(kpis['total_units']))
         with c4:
-            kpi_card("Ticket Médio", f"R$ {kpis['avg_ticket']:,.2f}")
+            kpi_card("Ticket Médio", format_brl(kpis['avg_ticket']))
         with c5:
-            kpi_card("Categoria Líder", kpis['top_category'], f"R$ {kpis['top_category_revenue']:,.2f}")
+            kpi_card("Categoria Líder", kpis['top_category'], format_brl(kpis['top_category_revenue']))
 
         st.write("")
 
@@ -226,11 +229,11 @@ if dataset_choice == "Vendas":
             ))
             fig_line.update_layout(
                 title="Receita e Lucro ao Longo do Tempo",
-                template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                template="plotly_dark", separators=PLOTLY_SEPARATORS, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 height=380, margin=dict(l=10, r=10, t=50, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             )
-            st.plotly_chart(fig_line, use_container_width=True)
+            st.plotly_chart(fig_line)
 
         with col_right:
             rev_cat = kpis["revenue_by_category"].reset_index()
@@ -241,10 +244,10 @@ if dataset_choice == "Vendas":
             )
             fig_pie.update_layout(
                 title="Receita por Categoria",
-                template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                template="plotly_dark", separators=PLOTLY_SEPARATORS, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 height=380, margin=dict(l=10, r=10, t=50, b=10), showlegend=True,
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie)
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -255,11 +258,11 @@ if dataset_choice == "Vendas":
                 color_continuous_scale="Purples", text_auto=".2s",
             )
             fig_bar_region.update_layout(
-                title="Receita por Região", template="plotly_dark",
+                title="Receita por Região", template="plotly_dark", separators=PLOTLY_SEPARATORS,
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 height=340, margin=dict(l=10, r=10, t=50, b=10), coloraxis_showscale=False,
             )
-            st.plotly_chart(fig_bar_region, use_container_width=True)
+            st.plotly_chart(fig_bar_region)
 
         with col_b:
             top_products = (
@@ -271,14 +274,14 @@ if dataset_choice == "Vendas":
                 color="revenue", color_continuous_scale="Blues", text_auto=".2s",
             )
             fig_bar_prod.update_layout(
-                title="Top Produtos por Receita", template="plotly_dark",
+                title="Top Produtos por Receita", template="plotly_dark", separators=PLOTLY_SEPARATORS,
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 height=340, margin=dict(l=10, r=10, t=50, b=10), coloraxis_showscale=False,
             )
-            st.plotly_chart(fig_bar_prod, use_container_width=True)
+            st.plotly_chart(fig_bar_prod)
 
         with st.expander("🔍 Ver dados brutos filtrados"):
-            st.dataframe(df_filtered, use_container_width=True)
+            st.dataframe(df_filtered)
 
     dataset_name_for_ai = "Vendas"
     df_for_ai = df_filtered
@@ -291,36 +294,37 @@ else:
     coin_name = st.sidebar.selectbox("Ativo", options=list(COIN_OPTIONS.keys()))
     days = st.sidebar.select_slider("Período (dias)", options=[7, 30, 90, 180, 365], value=90)
 
-    df_crypto, fetch_error = _cached_crypto_data(coin_name, days)
-
     st.title(f"🪙 Dashboard Executivo — {coin_name}")
     st.caption(f"Últimos {days} dias  •  Fonte: API pública CoinGecko (dados reais, atualização automática)")
 
-    if fetch_error == "rate_limit":
-        st.error(
-            "⏳ A API pública da CoinGecko atingiu o limite de requisições (HTTP 429) após múltiplas "
-            "tentativas com backoff exponencial. Aguarde alguns instantes e recarregue a página."
-        )
-    elif fetch_error:
-        st.error(f"❌ Não foi possível obter os dados da API no momento ({fetch_error}). Tente novamente em instantes.")
+    try:
+        df_crypto = _cached_crypto_data(coin_name, days)
+    except CryptoDataError as exc:
+        df_crypto = pd.DataFrame()
+        if exc.kind == "rate_limit":
+            st.error(
+                "⏳ A API pública da CoinGecko atingiu o limite de requisições (HTTP 429) após múltiplas "
+                "tentativas com backoff exponencial. Aguarde alguns instantes e recarregue a página."
+            )
+        else:
+            st.error(f"❌ Não foi possível obter os dados da API no momento ({exc.kind}). Tente novamente em instantes.")
+
+    kpis = compute_crypto_kpis(df_crypto)
 
     if df_crypto.empty:
         st.warning("⚠️ Nenhum dado disponível para exibir no momento.")
-        kpis = compute_crypto_kpis(df_crypto)
     else:
-        kpis = compute_crypto_kpis(df_crypto)
-
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            kpi_card("Preço Atual", f"US$ {kpis['current_price']:,.2f}",
-                      f"{kpis['period_change_pct']:+.2f}% no período",
+            kpi_card("Preço Atual", format_usd(kpis['current_price']),
+                      f"{format_pct(kpis['period_change_pct'], 2, signed=True)} no período",
                       delta_positive=kpis['period_change_pct'] >= 0)
         with c2:
-            kpi_card("Máxima do Período", f"US$ {kpis['max_price']:,.2f}")
+            kpi_card("Máxima do Período", format_usd(kpis['max_price']))
         with c3:
-            kpi_card("Mínima do Período", f"US$ {kpis['min_price']:,.2f}")
+            kpi_card("Mínima do Período", format_usd(kpis['min_price']))
         with c4:
-            kpi_card("Volatilidade Diária", f"{kpis['volatility_pct']:.2f}%",
+            kpi_card("Volatilidade Diária", format_pct(kpis['volatility_pct'], 2),
                       "Alta" if kpis['volatility_pct'] > 4 else "Moderada",
                       delta_positive=kpis['volatility_pct'] <= 4)
 
@@ -333,24 +337,24 @@ else:
             fillcolor="rgba(251,191,36,0.10)",
         ))
         fig_price.update_layout(
-            title=f"Preço de {coin_name} — {days} dias", template="plotly_dark",
+            title=f"Preço de {coin_name} — {days} dias", template="plotly_dark", separators=PLOTLY_SEPARATORS,
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             height=400, margin=dict(l=10, r=10, t=50, b=10),
         )
-        st.plotly_chart(fig_price, use_container_width=True)
+        st.plotly_chart(fig_price)
 
         fig_vol = px.bar(
             df_crypto, x="date", y="volume", color_discrete_sequence=["#818cf8"],
         )
         fig_vol.update_layout(
-            title="Volume Negociado (USD)", template="plotly_dark",
+            title="Volume Negociado (USD)", template="plotly_dark", separators=PLOTLY_SEPARATORS,
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             height=280, margin=dict(l=10, r=10, t=50, b=10),
         )
-        st.plotly_chart(fig_vol, use_container_width=True)
+        st.plotly_chart(fig_vol)
 
         with st.expander("🔍 Ver dados brutos"):
-            st.dataframe(df_crypto, use_container_width=True)
+            st.dataframe(df_crypto)
 
     period_label = f"últimos {days} dias"
     dataset_name_for_ai = "Criptomoedas"
@@ -365,9 +369,9 @@ st.divider()
 st.header("🤖 Relatório Executivo Automático")
 st.caption("Gerado por IA a partir dos dados filtrados acima — mesma fonte de números do dashboard.")
 
-if st.button("✨ Gerar Relatório com IA", type="primary", use_container_width=False):
+if st.button("✨ Gerar Relatório com IA", type="primary"):
     with st.spinner("Analisando dados e redigindo o relatório..."):
-        report_md, source = generate_executive_summary(
+        report_md, source, fallback_reason = generate_executive_summary(
             df=df_for_ai,
             kpis=kpis_for_ai,
             period_label=period_label,
@@ -376,13 +380,20 @@ if st.button("✨ Gerar Relatório com IA", type="primary", use_container_width=
         )
     st.session_state["last_report"] = report_md
     st.session_state["last_report_source"] = source
+    st.session_state["last_report_fallback_reason"] = fallback_reason
 
 if "last_report" in st.session_state:
     badge_class = "badge-gemini" if st.session_state["last_report_source"] == "gemini" else "badge-fallback"
     badge_text = "Gerado por Gemini API" if st.session_state["last_report_source"] == "gemini" else "Motor estatístico local (fallback)"
     st.markdown(f'<span class="report-badge {badge_class}">{badge_text}</span>', unsafe_allow_html=True)
 
-    st.markdown(st.session_state["last_report"])
+    fallback_reason = st.session_state.get("last_report_fallback_reason")
+    if fallback_reason:
+        st.warning(f"⚠️ O Gemini não foi usado porque {fallback_reason}")
+
+    # O Markdown do Streamlit interpreta texto entre dois "$" como fórmula
+    # (LaTeX); escapar o "$" evita que "R$ ... R$" vire uma equação.
+    st.markdown(st.session_state["last_report"].replace("$", r"\$"))
 
     st.download_button(
         "⬇️ Baixar Relatório (Markdown)",

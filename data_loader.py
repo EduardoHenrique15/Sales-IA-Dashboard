@@ -10,9 +10,11 @@ consome DataFrames já padronizados.
 
 Duas fontes plugáveis:
   1. VENDAS   -> dataset sintético, realista, com sazonalidade,
-                 tendência e ruído, cacheado em CSV.
+                 tendência e ruído. Gerado em memória a partir de
+                 um período e seed fixos, então é sempre idêntico
+                 (sem depender de arquivo em disco).
   2. CRIPTO   -> dados reais, consumidos automaticamente via API
-                 pública da CoinGecko (sem necessidade de API key).
+                 pública da CoinGecko (chave Demo opcional).
 
 Para adicionar uma nova fonte, basta criar uma função
 `load_<fonte>_data()` que devolva um DataFrame com uma coluna de
@@ -22,21 +24,22 @@ data e retornar um dicionário de metadados padronizado.
 
 from __future__ import annotations
 
-import os
 import time
-from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import requests
 
+from config import get_coingecko_api_key
+
 # ----------------------------------------------------------------
 # Configuração geral
 # ----------------------------------------------------------------
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-SALES_CACHE_PATH = os.path.join(DATA_DIR, "sales_data.csv")
-
-os.makedirs(DATA_DIR, exist_ok=True)
+# Período fixo da base sintética: três anos completos, para que os
+# números sejam reprodutíveis em qualquer máquina ou deploy.
+SALES_START_DATE = "2023-01-01"
+SALES_END_DATE = "2025-12-31"
+SALES_SEED = 42
 
 CATEGORIES = ["Eletrônicos", "Moda", "Casa & Decoração", "Alimentos", "Beleza"]
 REGIONS = ["Sudeste", "Sul", "Nordeste", "Centro-Oeste", "Norte"]
@@ -64,11 +67,11 @@ DECLINING_CATEGORY = "Moda"
 
 
 # ==================================================================
-# 1. FONTE: VENDAS (sintética, com cache em CSV)
+# 1. FONTE: VENDAS (sintética e determinística)
 # ==================================================================
-def _generate_synthetic_sales(start_date: str = "2023-01-01",
-                               end_date: str | None = None,
-                               seed: int = 42) -> pd.DataFrame:
+def _generate_synthetic_sales(start_date: str = SALES_START_DATE,
+                               end_date: str = SALES_END_DATE,
+                               seed: int = SALES_SEED) -> pd.DataFrame:
     """Gera uma base de vendas diária realista, com:
        - tendência de crescimento geral,
        - sazonalidade semanal e mensal,
@@ -77,7 +80,6 @@ def _generate_synthetic_sales(start_date: str = "2023-01-01",
     """
     rng = np.random.default_rng(seed)
 
-    end_date = end_date or datetime.today().strftime("%Y-%m-%d")
     dates = pd.date_range(start=start_date, end=end_date, freq="D")
 
     rows = []
@@ -141,16 +143,13 @@ def _region_probabilities():
     return weights / weights.sum()
 
 
-def load_sales_data(force_refresh: bool = False) -> pd.DataFrame:
-    """Carrega a base de vendas, usando cache local em CSV.
-    Se o arquivo não existir (ou `force_refresh=True`), gera a base
-    sintética novamente e salva em disco.
+def load_sales_data() -> pd.DataFrame:
+    """Carrega a base de vendas sintética.
+
+    A geração é determinística (período e seed fixos). O cache fica a
+    cargo da camada de interface (`st.cache_data`).
     """
-    if os.path.exists(SALES_CACHE_PATH) and not force_refresh:
-        df = pd.read_csv(SALES_CACHE_PATH, parse_dates=["date"])
-    else:
-        df = _generate_synthetic_sales()
-        df.to_csv(SALES_CACHE_PATH, index=False)
+    df = _generate_synthetic_sales()
 
     # tratamento defensivo de nulos (produção: dados nunca são perfeitos)
     df = df.dropna(subset=["date", "revenue"])
@@ -175,13 +174,29 @@ COIN_OPTIONS = {
 }
 
 
+class CryptoDataError(Exception):
+    """Falha ao obter dados da CoinGecko.
+
+    `kind` identifica o tipo de falha ("rate_limit", "network_error",
+    "empty_response" ou "invalid_response") para a interface exibir
+    a mensagem adequada.
+    """
+
+    def __init__(self, kind: str, detail: str = ""):
+        self.kind = kind
+        self.detail = detail
+        super().__init__(f"{kind}: {detail}" if detail else kind)
+
+
 def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180,
-                      max_retries: int = 3) -> tuple[pd.DataFrame, str | None]:
-    """Busca automaticamente o histórico de preço/volume/market cap de uma
+                      max_retries: int = 3) -> pd.DataFrame:
+    """Busca automaticamente o histórico de preço/volume de uma
     criptomoeda na API pública da CoinGecko.
 
-    Retorna (DataFrame, erro). Se `erro` não for None, o DataFrame
-    devolvido é o último fallback disponível (pode ser vazio).
+    Retorna um DataFrame com uma linha por dia (colunas `date`,
+    `price`, `volume`). Em caso de falha, levanta `CryptoDataError`
+    em vez de devolver um resultado vazio, para que falhas não sejam
+    guardadas no cache da interface.
 
     Trata explicitamente:
       - HTTP 429 (rate limit) com backoff exponencial,
@@ -192,44 +207,60 @@ def load_crypto_data(coin_name: str = "Bitcoin (BTC)", days: int = 180,
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
     url = COINGECKO_URL.format(coin_id=coin_id)
 
-    last_error = None
+    headers = {}
+    api_key = get_coingecko_api_key()
+    if api_key:
+        headers["x-cg-demo-api-key"] = api_key
+
+    last_error = CryptoDataError("network_error", "nenhuma tentativa realizada")
     for attempt in range(max_retries):
         try:
-            resp = requests.get(url, params=params, timeout=10)
+            resp = requests.get(url, params=params, headers=headers, timeout=10)
 
             if resp.status_code == 429:
-                wait = 2 ** attempt  # backoff exponencial: 1s, 2s, 4s...
-                last_error = "rate_limit"
-                time.sleep(wait)
+                last_error = CryptoDataError("rate_limit")
+                time.sleep(2 ** attempt)  # backoff exponencial: 1s, 2s, 4s...
                 continue
 
             resp.raise_for_status()
-            payload = resp.json()
-
-            prices = payload.get("prices", [])
-            volumes = payload.get("total_volumes", [])
-            if not prices:
-                return pd.DataFrame(), "empty_response"
-
-            df = pd.DataFrame(prices, columns=["timestamp", "price"])
-            df["date"] = pd.to_datetime(df["timestamp"], unit="ms").dt.normalize()
-
-            if volumes:
-                vol_df = pd.DataFrame(volumes, columns=["timestamp", "volume"])
-                df["volume"] = vol_df["volume"]
-            else:
-                df["volume"] = np.nan
-
-            df = df.dropna(subset=["price"])
-            df["price"] = pd.to_numeric(df["price"], errors="coerce")
-            df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
-            df = df.drop(columns=["timestamp"]).reset_index(drop=True)
-
-            return df, None
+            return _parse_market_chart(resp.json())
 
         except requests.exceptions.RequestException as exc:
-            last_error = f"network_error: {exc}"
+            last_error = CryptoDataError("network_error", str(exc))
             time.sleep(1)
-            continue
+        except ValueError as exc:
+            raise CryptoDataError("invalid_response", str(exc)) from exc
 
-    return pd.DataFrame(), last_error or "unknown_error"
+    raise last_error
+
+
+def _parse_market_chart(payload: dict) -> pd.DataFrame:
+    """Converte a resposta de `/market_chart` em um DataFrame diário.
+
+    Preço e volume são unidos pelo timestamp (não pela posição na
+    lista). A CoinGecko inclui um ponto extra com o horário atual,
+    que cai no mesmo dia do último fechamento; nesse caso fica só o
+    ponto mais recente do dia.
+    """
+    prices = payload.get("prices") or []
+    if not prices:
+        raise CryptoDataError("empty_response")
+
+    df = pd.DataFrame(prices, columns=["timestamp", "price"])
+    volumes = payload.get("total_volumes") or []
+    vol_df = pd.DataFrame(volumes, columns=["timestamp", "volume"])
+    df = df.merge(vol_df, on="timestamp", how="left")
+
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
+    df = df.dropna(subset=["price"])
+    if df.empty:
+        raise CryptoDataError("empty_response")
+
+    df["date"] = pd.to_datetime(df["timestamp"], unit="ms").dt.normalize()
+    df = (
+        df.sort_values("timestamp")
+        .drop_duplicates(subset="date", keep="last")
+        .drop(columns=["timestamp"])
+    )
+    return df[["date", "price", "volume"]].reset_index(drop=True)
