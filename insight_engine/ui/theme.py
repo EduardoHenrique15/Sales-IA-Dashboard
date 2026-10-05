@@ -1,0 +1,76 @@
+"""
+Identidade visual: CSS dos componentes, paleta e estilo dos gráficos.
+"""
+
+from __future__ import annotations
+
+import plotly.graph_objects as go
+import streamlit as st
+
+from insight_engine.formatting import PLOTLY_SEPARATORS
+
+# Paleta usada nos gráficos
+COLOR_REVENUE = "#818cf8"
+COLOR_PROFIT = "#34d399"
+COLOR_PRICE = "#fbbf24"
+
+CUSTOM_CSS = """
+<style>
+    .main { background-color: #0e1117; }
+
+    .kpi-card {
+        background: linear-gradient(135deg, #1c2333 0%, #161b28 100%);
+        border: 1px solid #2a3352;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 8px;
+    }
+    .kpi-label {
+        font-size: 0.80rem;
+        color: #9aa4c4;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+    }
+    .kpi-value {
+        font-size: 1.65rem;
+        font-weight: 700;
+        color: #f5f7ff;
+    }
+    .kpi-delta-up { color: #34d399; font-size: 0.85rem; font-weight: 600; }
+    .kpi-delta-down { color: #f87171; font-size: 0.85rem; font-weight: 600; }
+    .kpi-delta-neutral { color: #9aa4c4; font-size: 0.85rem; font-weight: 600; }
+
+    .report-badge {
+        display: inline-block;
+        padding: 3px 12px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+    }
+    .badge-gemini { background: #1e3a2f; color: #34d399; border: 1px solid #2f6f4e; }
+    .badge-fallback { background: #2a2440; color: #c4b5fd; border: 1px solid #4c3f7a; }
+
+    h1, h2, h3 { color: #f5f7ff; }
+</style>
+"""
+
+
+def inject_css() -> None:
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+def apply_chart_theme(fig: go.Figure, title: str, height: int, **layout) -> go.Figure:
+    """Aplica o estilo padrão do dashboard a um gráfico Plotly."""
+    fig.update_layout(
+        title=title,
+        template="plotly_dark",
+        separators=PLOTLY_SEPARATORS,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        height=height,
+        margin=dict(l=10, r=10, t=50, b=10),
+        **layout,
+    )
+    return fig
