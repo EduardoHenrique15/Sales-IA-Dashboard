@@ -5,7 +5,14 @@ from insight_engine.data.schemas import CRYPTO_SCHEMA, SALES_SCHEMA, DataValidat
 
 def test_base_valida_passa(small_sales_df):
     validated = validate(small_sales_df, SALES_SCHEMA, source="vendas")
-    assert list(validated.columns) == list(SALES_SCHEMA.columns)
+    # customer_id é opcional: a base mínima não tem essa coluna
+    assert list(validated.columns) == [c for c in SALES_SCHEMA.columns if c != "customer_id"]
+
+
+def test_custo_e_cliente_podem_faltar(small_sales_df):
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"), customer_id=None)
+    validated = validate(df, SALES_SCHEMA, source="vendas")
+    assert validated["cost"].isna().all()
 
 
 def test_colunas_extras_sao_descartadas(small_sales_df):

@@ -8,3 +8,5 @@ font = "sans serif"
 
 [server]
 headless = true
+# Tamanho máximo do arquivo enviado em "Importar dados" (MB)
+maxUploadSize = 20

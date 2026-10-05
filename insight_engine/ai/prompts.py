@@ -20,10 +20,13 @@ def build_prompt(kpis: SalesKPIs | CryptoKPIs, period_label: str, dataset_name: 
             if kpis.revenue_growth_pct is not None
             else "não disponível (sem período anterior comparável)"
         )
+        no_cost = "não disponível (a base não informa o custo)"
+        profit_txt = format_brl(kpis.total_profit) if kpis.total_profit is not None else no_cost
+        margin_txt = format_pct(kpis.margin_pct) if kpis.margin_pct is not None else no_cost
         kpi_block = f"""
 - Receita total: {format_brl(kpis.total_revenue)}
-- Lucro total: {format_brl(kpis.total_profit)}
-- Margem de lucro: {format_pct(kpis.margin_pct)}
+- Lucro total: {profit_txt}
+- Margem de lucro: {margin_txt}
 - Unidades vendidas: {format_number(kpis.total_units)}
 - Ticket médio: {format_brl(kpis.avg_ticket)}
 - Categoria líder: {kpis.top_category} ({format_brl(kpis.top_category_revenue)})

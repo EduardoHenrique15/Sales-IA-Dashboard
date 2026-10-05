@@ -18,6 +18,15 @@ from insight_engine.analytics.kpis import CryptoKPIs, SalesKPIs
 GEMINI_KEY_STATE = "gemini_api_key"
 
 
+def escape_currency(text: str) -> str:
+    """Escapa "$" para textos em Markdown do Streamlit.
+
+    O Streamlit interpreta o trecho entre dois "$" como fórmula (LaTeX), então
+    um texto com dois valores em reais ("R$ 10 ... R$ 20") viraria uma equação.
+    """
+    return text.replace("$", r"\$")
+
+
 def kpi_card(label: str, value: str, delta: str | None = None, delta_positive: bool | None = None) -> None:
     # Os textos são escapados porque vêm dos dados (ex.: nome de categoria)
     # e são exibidos como HTML.
@@ -36,7 +45,7 @@ def kpi_card(label: str, value: str, delta: str | None = None, delta_positive: b
         f"""
         <div class="kpi-card">
             <div class="kpi-label">{html.escape(label)}</div>
-            <div class="kpi-value">{html.escape(value)}</div>
+            <div class="kpi-value" title="{html.escape(value)}">{html.escape(value)}</div>
             {delta_html}
         </div>
         """,
@@ -44,13 +53,19 @@ def kpi_card(label: str, value: str, delta: str | None = None, delta_positive: b
     )
 
 
-def report_section(df: pd.DataFrame, kpis: SalesKPIs | CryptoKPIs, period_label: str, dataset_name: str) -> None:
+def report_section(
+    df: pd.DataFrame,
+    kpis: SalesKPIs | CryptoKPIs,
+    period_label: str,
+    dataset_name: str,
+    context: str = "",
+) -> None:
     """Botão de geração + exibição do Relatório Executivo.
 
-    O último relatório fica guardado por página, para que o relatório de
-    vendas não apareça na página de criptomoedas e vice-versa.
+    O último relatório fica guardado por página e por base de dados (`context`),
+    para que o relatório de uma base não apareça ao analisar outra.
     """
-    state_key = f"report_{dataset_name}"
+    state_key = f"report_{dataset_name}_{context}"
 
     st.divider()
     st.header("🤖 Relatório Executivo Automático")
@@ -80,9 +95,7 @@ def report_section(df: pd.DataFrame, kpis: SalesKPIs | CryptoKPIs, period_label:
     if result.fallback_reason:
         st.warning(f"⚠️ O Gemini não foi usado porque {result.fallback_reason}")
 
-    # O Markdown do Streamlit interpreta texto entre dois "$" como fórmula
-    # (LaTeX); escapar o "$" evita que "R$ ... R$" vire uma equação.
-    st.markdown(result.markdown.replace("$", r"\$"))
+    st.markdown(escape_currency(result.markdown))
 
     st.download_button(
         "⬇️ Baixar Relatório (Markdown)",

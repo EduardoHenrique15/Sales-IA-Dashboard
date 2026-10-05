@@ -48,3 +48,24 @@ def test_relatorio_sem_dados():
     assert "Não há dados de **Vendas**" in report
     for section in SECTIONS:
         assert section in report
+
+
+def test_tendencia_usa_o_teste_de_mann_kendall(sales_df):
+    df = sales_df[(sales_df["date"] >= "2025-10-02") & (sales_df["date"] <= "2025-12-31")]
+    report = fallback.sales_report(df, compute_sales_kpis(df), "p")
+    assert "teste de Mann-Kendall: tendência significativa, p = 0,0" in report
+    assert "indica **crescimento**" in report
+
+
+def test_serie_sem_tendencia_e_descrita_como_estabilidade(small_sales_df):
+    report = fallback.sales_report(small_sales_df, compute_sales_kpis(small_sales_df), "p")
+    assert "indica **estabilidade**" in report
+    assert "tendência não significativa" in report
+
+
+def test_relatorio_sem_custo(small_sales_df):
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
+    report = fallback.sales_report(df, compute_sales_kpis(df), "p")
+    assert "lucro e margem indisponíveis" in report
+    assert "Margem de lucro:** não disponível" in report
+    assert "Reavaliar política de custos" not in report

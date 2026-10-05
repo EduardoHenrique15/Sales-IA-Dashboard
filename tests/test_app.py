@@ -26,7 +26,7 @@ def clear_streamlit_cache():
 
 def kpi_values(at: AppTest) -> list[str]:
     cards = [m.value for m in at.markdown if 'class="kpi-value"' in m.value]
-    return [re.search(r'kpi-value">(.*?)<', card).group(1) for card in cards]
+    return [re.search(r'kpi-value"[^>]*>(.*?)<', card).group(1) for card in cards]
 
 
 @pytest.fixture
@@ -40,7 +40,8 @@ def test_pagina_de_vendas(app):
     assert not app.exception
     assert app.title[0].value == "📊 Dashboard Executivo de Vendas"
     assert kpi_values(app)[0] == "R$ 2.838.404,99"  # receita dos últimos 90 dias da base
-    assert len(app.get("plotly_chart")) == 4
+    assert len(app.get("plotly_chart")) == 6  # 4 da visão geral + 2 da análise de variação
+    assert any("Por que a receita mudou" in h.value for h in app.subheader)
 
 
 def test_filtro_de_categoria_atualiza_os_cards(app):
@@ -78,3 +79,49 @@ def test_falha_da_api_de_cripto_mostra_erro_sem_quebrar(app):
 
     assert not app.exception
     assert "limite de requisições" in app.error[0].value
+
+
+def test_pagina_de_previsao(app):
+    app.run()
+    app.switch_page("app_pages/forecast.py").run()
+
+    assert not app.exception
+    assert [h.value for h in app.header] == ["Previsão de receita", "Anomalias", "Padrões sazonais"]
+    assert app.metric[0].value.startswith("R$")
+    assert any("encontrou **3 de 3**" in i.value for i in app.info)
+
+
+def test_pagina_de_clientes(app):
+    app.run()
+    app.switch_page("app_pages/customers.py").run()
+
+    assert not app.exception
+    assert [h.value for h in app.header] == ["Segmentos RFM", "Grupos encontrados pelo K-Means"]
+    assert app.metric[0].label == "Clientes"
+
+
+def test_pagina_de_importacao_sem_arquivo(app):
+    app.run()
+    app.switch_page("app_pages/upload.py").run()
+    assert not app.exception
+    assert app.title[0].value == "📤 Importar dados de vendas"
+
+
+def test_base_enviada_sem_custo_nem_cliente(app, small_sales_df):
+    """Com uma base enviada, as páginas usam essa base e se adaptam ao que ela tem."""
+    from insight_engine.data.upload import SalesDataset
+    from insight_engine.ui.datasets import CHOICE_STATE, UPLOAD_STATE, UPLOADED
+
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
+    app.session_state[UPLOAD_STATE] = SalesDataset(df=df, name="minha_base.csv", has_cost=False, has_customers=False)
+    app.session_state[CHOICE_STATE] = UPLOADED
+    app.run()
+
+    assert not app.exception
+    assert "minha_base.csv" in app.caption[0].value
+    assert app.sidebar.radio[0].value == UPLOADED
+    assert "—" in kpi_values(app)[1]  # lucro indisponível
+
+    app.switch_page("app_pages/customers.py").run()
+    assert not app.exception
+    assert "não tem coluna de cliente" in app.info[0].value

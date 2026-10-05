@@ -22,8 +22,11 @@ SALES_SCHEMA = pa.DataFrameSchema(
         "units": pa.Column(int, pa.Check.ge(0)),
         "unit_price": pa.Column(float, pa.Check.ge(0)),
         "revenue": pa.Column(float, pa.Check.ge(0)),
-        "cost": pa.Column(float, pa.Check.ge(0)),
-        "profit": pa.Column(float),
+        # custo/lucro podem faltar em bases enviadas pelo usuário
+        "cost": pa.Column(float, pa.Check.ge(0), nullable=True),
+        "profit": pa.Column(float, nullable=True),
+        # opcional: nem toda base identifica o cliente
+        "customer_id": pa.Column(str, nullable=True, required=False),
     },
     coerce=True,
     strict="filter",  # colunas extras são descartadas

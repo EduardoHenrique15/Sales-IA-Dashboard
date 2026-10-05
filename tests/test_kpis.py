@@ -57,3 +57,17 @@ class TestCryptoKPIs:
 
     def test_dados_vazios(self):
         assert compute_crypto_kpis(pd.DataFrame()) == CryptoKPIs()
+
+
+def test_sem_custo_lucro_e_margem_ficam_indisponiveis(small_sales_df):
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
+    kpis = compute_sales_kpis(df)
+    assert kpis.total_profit is None
+    assert kpis.margin_pct is None
+    assert kpis.total_revenue == 1100  # o restante continua calculado
+
+
+def test_custo_parcial_tambem_fica_indisponivel(small_sales_df):
+    df = small_sales_df.copy()
+    df.loc[0, ["cost", "profit"]] = float("nan")
+    assert compute_sales_kpis(df).total_profit is None

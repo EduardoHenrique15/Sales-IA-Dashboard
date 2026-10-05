@@ -25,10 +25,17 @@ setup_logging()
 inject_css()
 
 page = st.navigation(
-    [
-        st.Page("app_pages/sales.py", title="Vendas", icon="📦", url_path="vendas", default=True),
-        st.Page("app_pages/crypto.py", title="Criptomoedas", icon="🪙", url_path="criptomoedas"),
-    ]
+    {
+        "Vendas": [
+            st.Page("app_pages/sales.py", title="Visão geral", icon="📦", default=True),
+            st.Page("app_pages/forecast.py", title="Previsão e anomalias", icon="📈", url_path="previsao"),
+            st.Page("app_pages/customers.py", title="Clientes", icon="👥", url_path="clientes"),
+            st.Page("app_pages/upload.py", title="Importar dados", icon="📤", url_path="importar"),
+        ],
+        "Mercado": [
+            st.Page("app_pages/crypto.py", title="Criptomoedas", icon="🪙", url_path="criptomoedas"),
+        ],
+    }
 )
 
 # ---------- BARRA LATERAL COMUM A TODAS AS PÁGINAS ----------

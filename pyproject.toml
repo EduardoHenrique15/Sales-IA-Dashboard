@@ -1,6 +1,6 @@
 [project]
 name = "insight-engine"
-version = "0.3.0"
+version = "0.4.0"
 description = "Dashboard executivo de vendas com KPIs, gráficos interativos e relatórios gerados por IA."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -17,6 +17,9 @@ dependencies = [
     "google-genai>=1.0",
     "python-dotenv>=1.0.1",
     "pandera>=0.24",
+    "statsmodels>=0.14",  # previsão (Holt-Winters) e decomposição (STL)
+    "scipy>=1.11",  # teste de Mann-Kendall
+    "openpyxl>=3.1",  # leitura de planilhas .xlsx enviadas
 ]
 
 [project.optional-dependencies]

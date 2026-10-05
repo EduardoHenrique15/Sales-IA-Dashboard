@@ -26,3 +26,10 @@ def test_prompt_de_cripto():
     assert "Variação no período: -2,50%" in prompt
     assert "Volatilidade diária (desvio padrão dos retornos): 3,21%" in prompt
     assert "Receita" not in prompt
+
+
+def test_prompt_sem_custo(small_sales_df):
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
+    prompt = build_prompt(compute_sales_kpis(df), "p", "Vendas")
+    assert "Lucro total: não disponível (a base não informa o custo)" in prompt
+    assert "Margem de lucro: não disponível" in prompt

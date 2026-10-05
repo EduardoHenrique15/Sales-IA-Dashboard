@@ -20,8 +20,9 @@ def _empty_series() -> pd.Series:
 @dataclass(frozen=True, eq=False)
 class SalesKPIs:
     total_revenue: float = 0.0
-    total_profit: float = 0.0
-    margin_pct: float = 0.0
+    # None quando a base não informa o custo (ex.: planilha enviada sem coluna de custo)
+    total_profit: float | None = 0.0
+    margin_pct: float | None = 0.0
     total_units: int = 0
     n_orders: int = 0
     avg_ticket: float = 0.0
@@ -55,8 +56,14 @@ def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None
         return SalesKPIs()
 
     total_revenue = float(df["revenue"].sum())
-    total_profit = float(df["profit"].sum())
     n_orders = len(df)
+
+    # Com custo ausente em algum pedido, lucro e margem ficam indisponíveis
+    # em vez de subestimados.
+    total_profit = float(df["profit"].sum()) if df["cost"].notna().all() else None
+    margin_pct = None
+    if total_profit is not None:
+        margin_pct = (total_profit / total_revenue * 100) if total_revenue else 0.0
 
     revenue_by_category = df.groupby("category")["revenue"].sum().sort_values(ascending=False)
     revenue_by_region = df.groupby("region")["revenue"].sum().sort_values(ascending=False)
@@ -70,7 +77,7 @@ def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None
     return SalesKPIs(
         total_revenue=total_revenue,
         total_profit=total_profit,
-        margin_pct=(total_profit / total_revenue * 100) if total_revenue else 0.0,
+        margin_pct=margin_pct,
         total_units=int(df["units"].sum()),
         n_orders=n_orders,
         avg_ticket=total_revenue / n_orders,

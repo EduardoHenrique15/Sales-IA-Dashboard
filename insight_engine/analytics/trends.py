@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.stats import kendalltau
 from sklearn.linear_model import LinearRegression
 
 
@@ -18,9 +19,26 @@ class Trend:
     # qualidade do ajuste (0 a 1)
     r2: float
 
+
+@dataclass(frozen=True)
+class MannKendall:
+    """Resultado do teste de tendência de Mann-Kendall."""
+
+    # tau de Kendall entre tempo e valor: de -1 (queda) a +1 (alta)
+    tau: float
+    p_value: float
+    alpha: float = 0.05
+
     @property
-    def confidence(self) -> str:
-        return "alta" if self.r2 > 0.5 else ("moderada" if self.r2 > 0.2 else "baixa")
+    def significant(self) -> bool:
+        return self.p_value < self.alpha
+
+    @property
+    def direction(self) -> str:
+        """Direção da tendência: alta, queda ou "sem tendência" (não significativa)."""
+        if not self.significant:
+            return "sem tendência"
+        return "alta" if self.tau > 0 else "queda"
 
 
 def fit_trend(series: pd.Series) -> Trend:
@@ -39,6 +57,20 @@ def fit_trend(series: pd.Series) -> Trend:
     mean_val = y.mean() if y.mean() != 0 else 1
     slope_pct_total = (slope * len(series)) / mean_val * 100
     return Trend(float(slope_pct_total), float(r2))
+
+
+def mann_kendall(series: pd.Series, alpha: float = 0.05) -> MannKendall:
+    """Teste não paramétrico de tendência monotônica (Mann-Kendall).
+
+    Equivale ao tau de Kendall entre a posição no tempo e o valor. Não supõe
+    distribuição normal nem tendência linear, por isso é o teste padrão
+    para séries de vendas, que costumam ter outliers e sazonalidade.
+    """
+    values = pd.Series(series).dropna().to_numpy(dtype=float)
+    if len(values) < 4 or np.all(values == values[0]):
+        return MannKendall(0.0, 1.0, alpha)
+    result = kendalltau(np.arange(len(values)), values)
+    return MannKendall(float(result.statistic), float(result.pvalue), alpha)
 
 
 def declining_categories(df: pd.DataFrame, threshold: float = -0.15) -> list[tuple[str, float]]:

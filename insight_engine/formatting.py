@@ -34,3 +34,10 @@ def format_usd(value: float, decimals: int = 2) -> str:
 def format_pct(value: float, decimals: int = 1, signed: bool = False) -> str:
     sign = "+" if signed else ""
     return _swap_separators(f"{value:{sign},.{decimals}f}") + "%"
+
+
+def format_p_value(p: float) -> str:
+    """Formata um p-valor para leitura: "p < 0,001" ou "p = 0,032"."""
+    if p < 0.001:
+        return "p < 0,001"
+    return f"p = {format_number(p, 3)}"

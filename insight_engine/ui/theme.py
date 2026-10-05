@@ -14,6 +14,17 @@ COLOR_REVENUE = "#818cf8"
 COLOR_PROFIT = "#34d399"
 COLOR_PRICE = "#fbbf24"
 
+# Paleta das análises (versão para fundo escuro da paleta categórica de referência,
+# validada para daltonismo: até 3 cores juntas passam em todas as checagens).
+SERIES_1 = "#3987e5"  # azul
+SERIES_2 = "#d95926"  # laranja
+SERIES_3 = "#199e70"  # verde-água
+# Polaridade (aumento x redução) e neutro
+POSITIVE = "#3987e5"
+NEGATIVE = "#e66767"
+NEUTRAL = "#6b6b66"
+MUTED_LINE = "#8a93b0"
+
 CUSTOM_CSS = """
 <style>
     .main { background-color: #0e1117; }
@@ -33,9 +44,13 @@ CUSTOM_CSS = """
         margin-bottom: 6px;
     }
     .kpi-value {
-        font-size: 1.65rem;
+        /* diminui em telas estreitas para o valor caber em uma linha */
+        font-size: clamp(0.95rem, 1.1vw, 1.65rem);
         font-weight: 700;
         color: #f5f7ff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .kpi-delta-up { color: #34d399; font-size: 0.85rem; font-weight: 600; }
     .kpi-delta-down { color: #f87171; font-size: 0.85rem; font-weight: 600; }

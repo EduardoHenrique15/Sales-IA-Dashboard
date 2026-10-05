@@ -3,6 +3,12 @@ Fonte de VENDAS: base sintética realista e determinística.
 
 Período e seed são fixos, então a base é sempre idêntica em qualquer
 máquina ou deploy, sem depender de arquivo em disco.
+
+Além de tendência e sazonalidade, a base traz:
+  - clientes recorrentes, com entrada e saída ao longo do tempo
+    (para a segmentação RFM);
+  - algumas anomalias plantadas em datas conhecidas (para validar
+    o detector de anomalias contra um gabarito).
 """
 
 from __future__ import annotations
@@ -53,6 +59,20 @@ REGION_WEIGHT = {
 # agente de IA ter algo relevante a diagnosticar como gargalo.
 DECLINING_CATEGORY = "Moda"
 
+# Clientes: sorteados com um gerador separado, para não alterar os
+# pedidos já gerados pela seed principal.
+CUSTOMER_SEED = SALES_SEED + 1
+N_CUSTOMERS = 4000
+REGION_CODE = {"Sudeste": "SE", "Sul": "S", "Nordeste": "NE", "Centro-Oeste": "CO", "Norte": "N"}
+
+# Anomalias plantadas: (data, tipo, fator). "pico" multiplica o número de
+# pedidos do dia (campanha); "queda" mantém só uma fração deles (incidente).
+PLANTED_ANOMALIES = [
+    ("2023-09-05", "queda", 0.15),  # instabilidade no checkout
+    ("2024-03-15", "pico", 3.0),  # campanha relâmpago
+    ("2024-08-07", "queda", 0.15),  # site fora do ar
+]
+
 
 def load_sales_data() -> pd.DataFrame:
     """Gera, limpa e valida a base de vendas sintética.
@@ -60,6 +80,8 @@ def load_sales_data() -> pd.DataFrame:
     O cache fica a cargo da camada de interface (`st.cache_data`).
     """
     df = _generate_synthetic_sales()
+    df = _plant_anomalies(df)
+    df = _assign_customers(df)
 
     # tratamento defensivo de nulos (produção: dados nunca são perfeitos)
     df = df.dropna(subset=["date", "revenue"])
@@ -142,3 +164,53 @@ def _generate_synthetic_sales(
 def _region_probabilities() -> np.ndarray:
     weights = np.array([REGION_WEIGHT[r] for r in REGIONS])
     return weights / weights.sum()
+
+
+def _plant_anomalies(df: pd.DataFrame) -> pd.DataFrame:
+    """Insere as anomalias de `PLANTED_ANOMALIES` de forma determinística."""
+    keep = pd.Series(True, index=df.index)
+    extra_orders = []
+    for day, kind, factor in PLANTED_ANOMALIES:
+        rows = df["date"] == pd.Timestamp(day)
+        if kind == "pico":
+            extra_orders.extend([df[rows]] * (round(factor) - 1))
+        else:
+            position = df[rows].groupby("date").cumcount()
+            keep[position.index] = position % round(1 / factor) == 0
+    df = pd.concat([df[keep], *extra_orders])
+    return df.sort_values("date", kind="stable").reset_index(drop=True)
+
+
+def _assign_customers(df: pd.DataFrame, seed: int = CUSTOMER_SEED) -> pd.DataFrame:
+    """Atribui um cliente a cada pedido.
+
+    Cada região tem sua carteira de clientes. Cada cliente tem uma data de
+    entrada, um tempo de vida (depois do qual para de comprar) e uma
+    propensão de compra com cauda longa: poucos clientes compram muito.
+    """
+    rng = np.random.default_rng(seed)
+    region_probs = dict(zip(REGIONS, _region_probabilities(), strict=True))
+    day_index = (df["date"] - df["date"].min()).dt.days.to_numpy()
+    total_days = int(day_index.max()) + 1
+    regions = df["region"].to_numpy()
+    customer = np.empty(len(df), dtype=object)
+
+    for region in REGIONS:
+        n = int(N_CUSTOMERS * region_probs[region])
+        ids = np.array([f"{REGION_CODE[region]}-{i:05d}" for i in range(n)])
+        # 25% da carteira já existe no início; o restante chega ao longo do período
+        start = np.where(rng.random(n) < 0.25, 0, rng.integers(0, total_days, n))
+        end = start + rng.exponential(scale=500, size=n)
+        propensity = rng.lognormal(mean=0.0, sigma=1.0, size=n)
+
+        rows = np.flatnonzero(regions == region)
+        rows = rows[np.argsort(day_index[rows], kind="stable")]
+        days, first = np.unique(day_index[rows], return_index=True)
+        for day, chunk in zip(days, np.split(rows, first[1:]), strict=True):
+            active = (start <= day) & (end >= day)
+            if not active.any():
+                active = start <= day
+            weights = propensity[active] / propensity[active].sum()
+            customer[chunk] = rng.choice(ids[active], size=len(chunk), p=weights)
+
+    return df.assign(customer_id=customer)
