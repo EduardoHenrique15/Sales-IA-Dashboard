@@ -31,12 +31,9 @@ def revenue_over_time(df: pd.DataFrame, show_profit: bool = True, granularity: s
     """
     p = palette()
     frequency = {"D": "D", "W": "W-MON", "M": "MS"}[granularity]
-    grouped = (
-        df.set_index("date")[["revenue", "profit"]]
-        .resample(frequency, label="left", closed="left")
-        .sum(min_count=1)
-        .dropna(how="all")
-    )
+    # dias/semanas/meses sem venda entram como zero: a média móvel é de 7 dias do
+    # calendário (e não das 7 últimas datas com venda) e a linha não "pula" os vazios
+    grouped = df.set_index("date")[["revenue", "profit"]].resample(frequency, label="left", closed="left").sum()
     date_format = {"D": "%d/%m/%Y", "W": "semana de %d/%m/%Y", "M": "%m/%Y"}[granularity]
 
     fig = go.Figure()

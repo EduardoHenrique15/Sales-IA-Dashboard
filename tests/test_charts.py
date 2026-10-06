@@ -32,6 +32,14 @@ def test_receita_por_dia_tem_media_movel_de_7_dias():
     assert average.name == "Receita"
 
 
+def test_dias_sem_venda_contam_como_zero_na_media_movel():
+    """Com vendas só em 01/01 e 10/01, a média de 7 dias em 10/01 inclui os 6 dias zerados."""
+    df = pd.DataFrame({"date": pd.to_datetime(["2025-01-01", "2025-01-10"]), "revenue": [70.0, 70.0], "profit": 0.0})
+    daily, average = charts.revenue_over_time(df, show_profit=False).data
+    assert len(daily.x) == 10 and list(daily.y[1:9]) == [0.0] * 8
+    assert average.y[-1] == 10.0
+
+
 def test_receita_agrupada_por_mes():
     df = pd.DataFrame(
         {

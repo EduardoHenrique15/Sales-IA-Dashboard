@@ -70,8 +70,11 @@ if df_filtered.empty:
     )
 else:
     # ---------- KPIs ----------
-    by_day = df_filtered.groupby(df_filtered["date"].dt.normalize()).agg(
-        revenue=("revenue", "sum"), profit=("profit", "sum"), orders=("revenue", "size")
+    # um ponto por dia do calendário (dias sem venda = zero)
+    by_day = (
+        df_filtered.set_index("date")
+        .resample("D")
+        .agg(revenue=("revenue", "sum"), profit=("profit", "sum"), orders=("revenue", "size"))
     )
     # minigráficos: por dia em períodos de até um mês, por semana nos maiores (menos ruído)
     trend = by_day if len(by_day) <= 31 else by_day.resample("W-MON", label="left", closed="left").sum()
