@@ -13,6 +13,7 @@ import streamlit as st
 
 from insight_engine.data.upload import SalesDataset
 from insight_engine.ui import cached
+from insight_engine.ui.layout import sidebar_filters
 
 UPLOAD_STATE = "uploaded_dataset"
 CHOICE_STATE = "dataset_choice"
@@ -51,7 +52,7 @@ def active_dataset() -> SalesDataset:
     """Base usada pelas páginas de vendas, com seletor na barra lateral."""
     uploaded = uploaded_dataset()
     if uploaded is None:
-        st.sidebar.caption(f"📂 {EXAMPLE_NAME}. Envie a sua em **Importar dados**.")
+        sidebar_filters().caption(f":material/database: {EXAMPLE_NAME}. Envie a sua em **Importar dados**.")
         return example_dataset()
 
     names = {EXAMPLE: EXAMPLE_NAME, UPLOADED: f"Meu arquivo: {uploaded.name}"}
@@ -61,7 +62,7 @@ def active_dataset() -> SalesDataset:
     def remember() -> None:
         st.session_state[CHOICE_STATE] = st.session_state["_dataset_choice_widget"]
 
-    choice = st.sidebar.radio(
+    choice = sidebar_filters().radio(
         "Base de dados",
         options=list(names),
         format_func=names.get,

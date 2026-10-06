@@ -1,6 +1,6 @@
 [project]
 name = "insight-engine"
-version = "0.6.0"
+version = "0.7.0"
 description = "Dashboard executivo de vendas com KPIs, gráficos interativos e relatórios gerados por IA."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 # Dependências diretas, com versões mínimas. As versões exatas usadas no
 # deploy ficam travadas em requirements.txt (gerado a partir daqui).
 dependencies = [
-    "streamlit>=1.40",
+    "streamlit>=1.65",  # persist_state, st.metric com minigráfico, st.badge
     "pandas>=2.2",
     "numpy>=1.26",
     "plotly>=5.22",

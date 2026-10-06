@@ -1,10 +1,38 @@
+[client]
+# Visitantes veem só as opções de leitura (ex.: trocar tema claro/escuro),
+# sem os menus de desenvolvedor.
+toolbarMode = "viewer"
+
 [theme]
-base = "dark"
-primaryColor = "#818cf8"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "0.6rem"
+metricValueFontSize = "1.75rem"
+
+# Os dois temas usam a mesma identidade: azul como cor de destaque e a paleta
+# categórica validada para daltonismo (cada modo com seus tons).
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f5f9"
+textColor = "#14171f"
+borderColor = "#e2e5ec"
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a"]
+
+[theme.light.sidebar]
+backgroundColor = "#f6f7fa"
+secondaryBackgroundColor = "#eceff4"
+
+[theme.dark]
+primaryColor = "#3987e5"
 backgroundColor = "#0e1117"
-secondaryBackgroundColor = "#161b28"
-textColor = "#f5f7ff"
-font = "sans serif"
+secondaryBackgroundColor = "#1a1f2b"
+textColor = "#eef1f7"
+borderColor = "#2a3140"
+chartCategoricalColors = ["#3987e5", "#d95926", "#199e70"]
+
+[theme.dark.sidebar]
+backgroundColor = "#121620"
+secondaryBackgroundColor = "#1d2330"
 
 [server]
 headless = true

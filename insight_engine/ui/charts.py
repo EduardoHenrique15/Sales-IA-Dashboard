@@ -13,43 +13,66 @@ import plotly.graph_objects as go
 from insight_engine.analytics.forecasting import ForecastResult
 from insight_engine.analytics.variance import RevenueBridge
 from insight_engine.formatting import format_number
-from insight_engine.ui.theme import (
-    MUTED_LINE,
-    NEGATIVE,
-    NEUTRAL,
-    POSITIVE,
-    SERIES_1,
-    SERIES_2,
-    SERIES_3,
-    apply_chart_theme,
-)
+from insight_engine.ui.theme import apply_chart_theme, palette
 
-_HORIZONTAL_LEGEND = dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+_HORIZONTAL_LEGEND = dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, title=None)
+GRANULARITIES = {"D": "Dia", "W": "Semana", "M": "Mês"}
+MOVING_AVERAGE_DAYS = 7
 
 
 # ------------------------------------------------------------------
 # Vendas
 # ------------------------------------------------------------------
-def revenue_profit_over_time(df: pd.DataFrame, show_profit: bool = True) -> go.Figure:
-    daily = df.groupby(df["date"].dt.normalize()).agg(revenue=("revenue", "sum"), profit=("profit", "sum"))
+def revenue_over_time(df: pd.DataFrame, show_profit: bool = True, granularity: str = "D") -> go.Figure:
+    """Receita (e lucro) por dia, semana ou mês.
+
+    Por dia, a série diária fica clara ao fundo e a média móvel de 7 dias em
+    destaque: o dia a dia de vendas é ruidoso e a média mostra a tendência.
+    """
+    p = palette()
+    frequency = {"D": "D", "W": "W-MON", "M": "MS"}[granularity]
+    grouped = (
+        df.set_index("date")[["revenue", "profit"]]
+        .resample(frequency, label="left", closed="left")
+        .sum(min_count=1)
+        .dropna(how="all")
+    )
+    date_format = {"D": "%d/%m/%Y", "W": "semana de %d/%m/%Y", "M": "%m/%Y"}[granularity]
 
     fig = go.Figure()
-    series = [("revenue", "Receita", SERIES_1)] + ([("profit", "Lucro", SERIES_3)] if show_profit else [])
+    series = [("revenue", "Receita", p.series_1)] + ([("profit", "Lucro", p.series_3)] if show_profit else [])
     for column, name, color in series:
+        values = grouped[column]
+        if granularity == "D":
+            fig.add_trace(
+                go.Scatter(
+                    x=values.index,
+                    y=values,
+                    name=f"{name} diária",
+                    legendgroup=name,
+                    showlegend=False,
+                    mode="lines",
+                    line=dict(color=color, width=1),
+                    opacity=0.3,
+                    hovertemplate="R$ %{y:,.2f}<extra>" + name + " no dia</extra>",
+                )
+            )
+            values = values.rolling(MOVING_AVERAGE_DAYS, min_periods=1).mean()
         fig.add_trace(
             go.Scatter(
-                x=daily.index,
-                y=daily[column],
+                x=values.index,
+                y=values,
                 name=name,
-                mode="lines",
-                line=dict(color=color, width=2),
-                hovertemplate="%{x|%d/%m/%Y}: R$ %{y:,.2f}<extra>" + name + "</extra>",
+                legendgroup=name,
+                mode="lines+markers" if len(values) <= 16 else "lines",
+                line=dict(color=color, width=2.5),
+                hovertemplate="R$ %{y:,.2f}<extra>" + name + "</extra>",
             )
         )
     fig.update_layout(hovermode="x unified")
+    fig.update_xaxes(hoverformat=date_format)
     fig.update_yaxes(tickformat=",.0f")
-    title = "Receita e lucro por dia" if show_profit else "Receita por dia"
-    return date_axis(apply_chart_theme(fig, title, 380, legend=_HORIZONTAL_LEGEND, showlegend=show_profit))
+    return date_axis(apply_chart_theme(fig, 400, legend=_HORIZONTAL_LEGEND, margin=dict(l=8, r=8, t=30, b=8)))
 
 
 def revenue_by_category(revenue: pd.Series) -> go.Figure:
@@ -59,30 +82,29 @@ def revenue_by_category(revenue: pd.Series) -> go.Figure:
     return _labeled_bars(
         data,
         [f"{_short_brl(v)} ({format_number(v / total * 100, 1)}%)" for v in data.values],
-        "Receita por categoria",
-        380,
-        room=2.1,  # coluna estreita e rótulos longos (valor + participação)
+        340,
+        room=1.75,  # rótulos longos (valor + participação)
     )
 
 
 def revenue_by_region(revenue: pd.Series) -> go.Figure:
     data = revenue.sort_values()
-    return _labeled_bars(data, [_short_brl(v) for v in data.values], "Receita por região", 340)
+    return _labeled_bars(data, [_short_brl(v) for v in data.values], 340)
 
 
 def top_products(df: pd.DataFrame, n: int = 8) -> go.Figure:
     data = df.groupby("product")["revenue"].sum().sort_values(ascending=True).tail(n)
-    return _labeled_bars(data, [_short_brl(v) for v in data.values], f"Top {n} produtos por receita", 340)
+    return _labeled_bars(data, [_short_brl(v) for v in data.values], 340)
 
 
-def _labeled_bars(data: pd.Series, labels: list[str], title: str, height: int, room: float = 1.45) -> go.Figure:
+def _labeled_bars(data: pd.Series, labels: list[str], height: int, room: float = 1.45) -> go.Figure:
     """Barras horizontais de uma cor, com o valor escrito ao lado (o eixo numérico fica oculto)."""
     fig = go.Figure(
         go.Bar(
             x=data.values,
             y=data.index,
             orientation="h",
-            marker=dict(color=SERIES_1),
+            marker=dict(color=palette().series_1),
             text=labels,
             textposition="outside",
             cliponaxis=False,
@@ -91,7 +113,8 @@ def _labeled_bars(data: pd.Series, labels: list[str], title: str, height: int, r
     )
     # espaço à direita para os rótulos não serem cortados
     fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[0, data.max() * room])
-    return apply_chart_theme(fig, title, height, showlegend=False)
+    fig.update_yaxes(ticksuffix="  ")
+    return apply_chart_theme(fig, height, showlegend=False)
 
 
 def date_axis(fig: go.Figure) -> go.Figure:
@@ -111,42 +134,44 @@ def date_axis(fig: go.Figure) -> go.Figure:
 # ------------------------------------------------------------------
 def revenue_bridge(bridge: RevenueBridge) -> go.Figure:
     """Cascata: receita anterior -> efeitos volume/preço/mix -> receita atual."""
+    p = palette()
     effects = [bridge.volume_effect, bridge.price_effect, bridge.mix_effect]
     fig = go.Figure(
         go.Waterfall(
-            x=["Período anterior", "Volume", "Preço", "Mix", "Período atual"],
+            x=["Comparação", "Volume", "Preço", "Mix", "Período atual"],
             measure=["absolute", "relative", "relative", "relative", "total"],
             y=[bridge.previous_revenue, *effects, bridge.current_revenue],
             text=[_short_brl(v) for v in [bridge.previous_revenue, *effects, bridge.current_revenue]],
             textposition="outside",
-            connector=dict(line=dict(color=NEUTRAL, width=1)),
-            increasing=dict(marker=dict(color=POSITIVE)),
-            decreasing=dict(marker=dict(color=NEGATIVE)),
-            totals=dict(marker=dict(color=NEUTRAL)),
+            connector=dict(line=dict(color=p.neutral, width=1)),
+            increasing=dict(marker=dict(color=p.positive)),
+            decreasing=dict(marker=dict(color=p.negative)),
+            totals=dict(marker=dict(color=p.neutral)),
             hovertemplate="%{x}: R$ %{y:,.2f}<extra></extra>",
         )
     )
     # Eixo ampliado em torno da variação: com o eixo a partir de zero, efeitos de poucos
     # por cento ficariam invisíveis ao lado dos totais. Os valores do eixo ficam visíveis
-    # (e o título avisa) para que o recorte seja explícito.
+    # (e o subtítulo do cartão avisa) para que o recorte seja explícito.
     levels = [bridge.previous_revenue]
     for effect in effects:
         levels.append(levels[-1] + effect)
     low, high = min(levels), max(levels)
     pad = max((high - low) * 0.6, high * 0.02)
     fig.update_yaxes(range=[max(0, low - pad), high + pad], tickformat=",.0f")
-    return apply_chart_theme(fig, "Da receita anterior à atual (eixo não começa em zero)", 380, showlegend=False)
+    return apply_chart_theme(fig, 380, showlegend=False)
 
 
 def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
     """Contribuição de cada categoria para a variação total (barras divergentes)."""
+    p = palette()
     data = by_segment.sort_values("total")
     fig = go.Figure(
         go.Bar(
             x=data["total"],
             y=data.index,
             orientation="h",
-            marker=dict(color=[POSITIVE if v >= 0 else NEGATIVE for v in data["total"]]),
+            marker=dict(color=[p.positive if v >= 0 else p.negative for v in data["total"]]),
             text=[_short_brl(v) for v in data["total"]],
             textposition="outside",
             cliponaxis=False,
@@ -157,24 +182,26 @@ def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
             ),
         )
     )
-    fig.add_vline(x=0, line=dict(color=NEUTRAL, width=1))
+    fig.add_vline(x=0, line=dict(color=p.neutral, width=1))
     reach = data["total"].abs().max() * 1.6 or 1
     fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[-reach, reach])
-    return apply_chart_theme(fig, "Variação por categoria", 380, showlegend=False)
+    fig.update_yaxes(ticksuffix="  ")
+    return apply_chart_theme(fig, 380, showlegend=False)
 
 
 def forecast(result: ForecastResult, history_days: int = 180) -> go.Figure:
+    p = palette()
     history = result.history.iloc[-history_days:]
     fc = result.forecast
     band_x = list(fc.index) + list(fc.index[::-1])
     fig = go.Figure()
-    for level, opacity in (("95", 0.08), ("80", 0.16)):
+    for level, opacity in (("95", 0.12), ("80", 0.22)):
         fig.add_trace(
             go.Scatter(
                 x=band_x,
                 y=list(fc[f"upper_{level}"]) + list(fc[f"lower_{level}"][::-1]),
                 fill="toself",
-                fillcolor=f"rgba(217,89,38,{opacity})",
+                fillcolor=_rgba(p.series_2, opacity),
                 line=dict(width=0),
                 name=f"Intervalo de {level}%",
                 hoverinfo="skip",
@@ -186,8 +213,8 @@ def forecast(result: ForecastResult, history_days: int = 180) -> go.Figure:
             y=history,
             name="Receita realizada",
             mode="lines",
-            line=dict(color=SERIES_1, width=2),
-            hovertemplate="%{x|%d/%m/%Y}: R$ %{y:,.2f}<extra>Realizado</extra>",
+            line=dict(color=p.series_1, width=1.8),
+            hovertemplate="R$ %{y:,.2f}<extra>Realizado</extra>",
         )
     )
     fig.add_trace(
@@ -196,29 +223,29 @@ def forecast(result: ForecastResult, history_days: int = 180) -> go.Figure:
             y=fc["yhat"],
             name="Previsão",
             mode="lines",
-            line=dict(color=SERIES_2, width=2.5),
-            hovertemplate="%{x|%d/%m/%Y}: R$ %{y:,.2f}<extra>Previsão</extra>",
+            line=dict(color=p.series_2, width=2.5),
+            hovertemplate="R$ %{y:,.2f}<extra>Previsão</extra>",
         )
     )
     fig.update_layout(hovermode="x unified")
+    fig.update_xaxes(hoverformat="%d/%m/%Y")
     fig.update_yaxes(tickformat=",.0f")
-    return date_axis(
-        apply_chart_theme(fig, "Receita diária: histórico recente e previsão", 420, legend=_HORIZONTAL_LEGEND)
-    )
+    return date_axis(apply_chart_theme(fig, 420, legend=_HORIZONTAL_LEGEND, margin=dict(l=8, r=8, t=30, b=8)))
 
 
 def anomalies(series: pd.Series, found: pd.DataFrame, value_label: str) -> go.Figure:
+    p = palette()
     fig = go.Figure(
         go.Scatter(
             x=series.index,
             y=series,
             name=value_label,
             mode="lines",
-            line=dict(color=MUTED_LINE, width=1),
+            line=dict(color=p.muted_line, width=1.2),
             hovertemplate="%{x|%d/%m/%Y}: %{y:,.0f}<extra></extra>",
         )
     )
-    for kind, color, symbol in (("pico", POSITIVE, "triangle-up"), ("queda", NEGATIVE, "triangle-down")):
+    for kind, color, symbol in (("pico", p.positive, "triangle-up"), ("queda", p.negative, "triangle-down")):
         points = found[found["kind"] == kind]
         fig.add_trace(
             go.Scatter(
@@ -226,7 +253,7 @@ def anomalies(series: pd.Series, found: pd.DataFrame, value_label: str) -> go.Fi
                 y=points["value"],
                 name=f"Anomalia: {kind}",
                 mode="markers",
-                marker=dict(color=color, size=11, symbol=symbol, line=dict(color="#0e1117", width=2)),
+                marker=dict(color=color, size=12, symbol=symbol, line=dict(color=p.surface, width=1.5)),
                 customdata=points[["expected", "deviation_pct"]].to_numpy(),
                 hovertemplate=(
                     "<b>%{x|%d/%m/%Y}</b><br>Observado: %{y:,.0f}<br>Esperado: %{customdata[0]:,.0f}"
@@ -234,42 +261,44 @@ def anomalies(series: pd.Series, found: pd.DataFrame, value_label: str) -> go.Fi
                 ),
             )
         )
-    return date_axis(
-        apply_chart_theme(fig, f"{value_label} por dia e anomalias detectadas", 380, legend=_HORIZONTAL_LEGEND)
-    )
+    return date_axis(apply_chart_theme(fig, 380, legend=_HORIZONTAL_LEGEND, margin=dict(l=8, r=8, t=30, b=8)))
 
 
 def weekday_effect(profile: pd.Series) -> go.Figure:
+    p = palette()
     fig = go.Figure(
         go.Bar(
             x=profile.index,
             y=profile,
-            marker=dict(color=[POSITIVE if v >= 0 else NEGATIVE for v in profile]),
+            marker=dict(color=[p.positive if v >= 0 else p.negative for v in profile]),
             hovertemplate="%{x}: %{y:+,.0f} em relação à média<extra></extra>",
         )
     )
-    fig.add_hline(y=0, line=dict(color=NEUTRAL, width=1))
-    return apply_chart_theme(fig, "Efeito do dia da semana na receita (R$/dia)", 320, showlegend=False)
+    fig.add_hline(y=0, line=dict(color=p.neutral, width=1))
+    fig.update_yaxes(tickformat="+,.0f")
+    return apply_chart_theme(fig, 320, showlegend=False)
 
 
 def monthly_index(index: pd.Series) -> go.Figure:
+    p = palette()
     fig = go.Figure(
         go.Bar(
             x=index.index,
             y=index - 1,
             base=1,
-            marker=dict(color=[POSITIVE if v >= 1 else NEGATIVE for v in index]),
+            marker=dict(color=[p.positive if v >= 1 else p.negative for v in index]),
             hovertemplate="%{x}: índice %{y:.2f}<extra></extra>",
         )
     )
-    fig.add_hline(y=1, line=dict(color=NEUTRAL, width=1))
-    return apply_chart_theme(fig, "Sazonalidade mensal (1,0 = mês típico)", 320, showlegend=False)
+    fig.add_hline(y=1, line=dict(color=p.neutral, width=1))
+    return apply_chart_theme(fig, 320, showlegend=False)
 
 
 def segments(summary: pd.DataFrame) -> go.Figure:
+    p = palette()
     data = summary.iloc[::-1]  # primeiro segmento no topo
     fig = go.Figure()
-    series = (("customers_pct", "% dos clientes", SERIES_1), ("revenue_pct", "% da receita", SERIES_2))
+    series = (("customers_pct", "% dos clientes", p.series_1), ("revenue_pct", "% da receita", p.series_2))
     for column, name, color in series:
         fig.add_trace(
             go.Bar(
@@ -282,34 +311,71 @@ def segments(summary: pd.DataFrame) -> go.Figure:
             )
         )
     fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.08)
-    return apply_chart_theme(fig, "Peso de cada segmento em clientes e em receita", 420, legend=_HORIZONTAL_LEGEND)
+    fig.update_xaxes(ticksuffix="%")
+    fig.update_yaxes(ticksuffix="  ")
+    return apply_chart_theme(fig, 420, legend=_HORIZONTAL_LEGEND, margin=dict(l=8, r=8, t=30, b=8))
+
+
+def rfm_heatmap(customers: pd.DataFrame) -> go.Figure:
+    """Clientes por nota de recência x frequência (rampa de um só tom: mais escuro/claro = mais clientes)."""
+    p = palette()
+    grid = (
+        customers.groupby(["f_score", "r_score"])
+        .size()
+        .unstack(fill_value=0)
+        .reindex(index=range(1, 6), columns=range(1, 6), fill_value=0)
+    )
+    steps = len(p.sequential) - 1
+    fig = go.Figure(
+        go.Heatmap(
+            z=grid.to_numpy(),
+            x=[str(r) for r in grid.columns],
+            y=[str(f) for f in grid.index],
+            colorscale=[[i / steps, color] for i, color in enumerate(p.sequential)],
+            text=grid.to_numpy(),
+            texttemplate="%{text}",
+            xgap=3,
+            ygap=3,
+            colorbar=dict(title=dict(text="Clientes"), thickness=10),
+            hovertemplate="Recência %{x} · Frequência %{y}<br>%{z} clientes<extra></extra>",
+        )
+    )
+    fig.update_xaxes(title="Recência (5 = comprou há pouco)", showgrid=False, dtick=1)
+    fig.update_yaxes(title="Frequência (5 = compra muito)", showgrid=False, dtick=1)
+    return apply_chart_theme(fig, 420)
 
 
 def silhouette(scores: pd.Series, best_k: int) -> go.Figure:
+    p = palette()
     fig = go.Figure(
         go.Scatter(
             x=scores.index,
             y=scores,
             mode="lines+markers",
-            line=dict(color=SERIES_1, width=2),
-            marker=dict(size=9, color=[SERIES_2 if k == best_k else SERIES_1 for k in scores.index]),
+            line=dict(color=p.series_1, width=2),
+            marker=dict(size=10, color=[p.series_2 if k == best_k else p.series_1 for k in scores.index]),
             hovertemplate="k = %{x}: silhueta %{y:.3f}<extra></extra>",
         )
     )
-    fig.update_xaxes(dtick=1, title="Número de grupos")
-    return apply_chart_theme(fig, f"Silhueta por k (escolhido: {best_k})", 280, showlegend=False)
+    fig.update_xaxes(dtick=1, title="Número de grupos (k)")
+    return apply_chart_theme(fig, 280, showlegend=False)
 
 
-def cluster_profile(clusters: pd.DataFrame, column: str, title: str, hover_format: str) -> go.Figure:
+def cluster_profile(clusters: pd.DataFrame, column: str, hover_format: str) -> go.Figure:
     fig = go.Figure(
         go.Bar(
             x=clusters.index,
             y=clusters[column],
-            marker=dict(color=SERIES_1),
+            marker=dict(color=palette().series_1),
             hovertemplate="%{x}: " + hover_format + "<extra></extra>",
         )
     )
-    return apply_chart_theme(fig, title, 280, showlegend=False)
+    return apply_chart_theme(fig, 280, showlegend=False)
+
+
+def _rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def _short_brl(value: float) -> str:

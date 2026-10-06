@@ -1,5 +1,5 @@
 """
-Página: Dashboard Executivo de Vendas.
+Página: visão geral de vendas.
 """
 
 import pandas as pd
@@ -11,7 +11,21 @@ from insight_engine.analytics.periods import apply_segments, filter_sales
 from insight_engine.analytics.variance import revenue_bridge
 from insight_engine.formatting import format_brl, format_number, format_pct
 from insight_engine.ui import charts, datasets, filters
-from insight_engine.ui.components import escape_currency, kpi_card, report_section
+from insight_engine.ui.components import chart_card, escape_currency, page_header, report_section
+
+# nomes e formatos das colunas na aba "Dados"
+DATA_COLUMNS = {
+    "date": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+    "category": st.column_config.TextColumn("Categoria"),
+    "region": st.column_config.TextColumn("Região"),
+    "product": st.column_config.TextColumn("Produto"),
+    "customer_id": st.column_config.TextColumn("Cliente"),
+    "units": st.column_config.NumberColumn("Unidades", format="localized"),
+    "unit_price": st.column_config.NumberColumn("Preço unitário (R$)", format="localized"),
+    "revenue": st.column_config.NumberColumn("Receita (R$)", format="localized"),
+    "cost": st.column_config.NumberColumn("Custo (R$)", format="localized"),
+    "profit": st.column_config.NumberColumn("Lucro (R$)", format="localized"),
+}
 
 dataset = datasets.active_dataset()
 df_all = dataset.df
@@ -23,45 +37,97 @@ goal = filters.revenue_goal(dataset_key)
 
 df_filtered, df_prev = filter_sales(df_all, selection)
 kpis = compute_sales_kpis(df_filtered, previous_df=df_prev)
+previous_kpis = compute_sales_kpis(df_prev) if not df_prev.empty else None
 comparison = selection.comparison_label
+versus = "vs ano anterior" if selection.comparison == "ano_anterior" else "vs anterior"
 
 # ---------- CABEÇALHO ----------
-st.title("📊 Dashboard Executivo de Vendas")
-st.caption(
-    f"Período selecionado: **{selection.period_label}**  •  {format_number(kpis.n_orders)} pedidos analisados"
-    f"  •  Base: {dataset.name}  •  🔗 os filtros ficam no endereço da página: copie o link para compartilhar"
+page_header(
+    "Visão geral de vendas",
+    f":material/calendar_month: **{selection.period_label}** · {format_number(kpis.n_orders)} pedidos · "
+    f"comparação com o {comparison} · Base: {dataset.name}",
+    icon=":material/dashboard:",
 )
 
-if df_filtered.empty:
-    st.warning("⚠️ Nenhum dado encontrado para os filtros selecionados. Ajuste o período ou os filtros.")
-else:
-    # ---------- KPI CARDS ----------
-    growth = kpis.revenue_growth_pct
-    short_comparison = "ano anterior" if selection.comparison == "ano_anterior" else "período anterior"
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        kpi_card(
-            "Receita Total",
-            format_brl(kpis.total_revenue),
-            delta=f"{format_pct(growth, signed=True)} vs {short_comparison}" if growth is not None else None,
-            delta_positive=growth >= 0 if growth is not None else None,
+if selection.categories or selection.regions:
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.caption("Filtrando por:", width="content")
+        for value in [*selection.categories, *selection.regions]:
+            st.badge(value, icon=":material/filter_alt:", color="blue")
+        st.button(
+            "Limpar filtros",
+            icon=":material/filter_alt_off:",
+            type="tertiary",
+            on_click=filters.clear_segments,
+            args=(dataset_key,),
+            key="clear_filters",
         )
-    with c2:
-        if kpis.total_profit is None or kpis.margin_pct is None:
-            kpi_card("Lucro Total", "—", "Custo não informado na base")
-        else:
-            kpi_card(
-                "Lucro Total",
-                format_brl(kpis.total_profit),
-                f"Margem: {format_pct(kpis.margin_pct)}",
-                delta_positive=kpis.margin_pct >= 20,
-            )
-    with c3:
-        kpi_card("Unidades Vendidas", format_number(kpis.total_units))
-    with c4:
-        kpi_card("Ticket Médio", format_brl(kpis.avg_ticket))
-    with c5:
-        kpi_card("Categoria Líder", kpis.top_category, format_brl(kpis.top_category_revenue))
+
+if df_filtered.empty:
+    st.warning(
+        "Nenhum dado encontrado para os filtros selecionados. Ajuste o período ou os filtros.",
+        icon=":material/search_off:",
+    )
+else:
+    # ---------- KPIs ----------
+    by_day = df_filtered.groupby(df_filtered["date"].dt.normalize()).agg(
+        revenue=("revenue", "sum"), profit=("profit", "sum"), orders=("revenue", "size")
+    )
+    # minigráficos: por dia em períodos de até um mês, por semana nos maiores (menos ruído)
+    trend = by_day if len(by_day) <= 31 else by_day.resample("W-MON", label="left", closed="left").sum()
+
+    def points(values: pd.Series) -> list[float]:
+        return [round(float(v), 2) for v in values.fillna(0)]
+
+    def change(now: float | None, before: float | None) -> str | None:
+        if now is None or not before:
+            return None
+        return format_pct((now - before) / abs(before) * 100, signed=True)
+
+    prev = previous_kpis or SalesKPIs()
+    has_prev = previous_kpis is not None
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "Receita",
+        format_brl(kpis.total_revenue, 0),
+        delta=change(kpis.total_revenue, prev.total_revenue) if has_prev else None,
+        delta_description=versus,
+        border=True,
+        chart_data=points(trend["revenue"]),
+        chart_type="area",
+        help=f"Valor exato: {format_brl(kpis.total_revenue)}",
+    )
+    if kpis.total_profit is None or kpis.margin_pct is None:
+        c2.metric("Lucro", "—", border=True, help="A base não informa o custo, então o lucro não é calculado.")
+    else:
+        c2.metric(
+            f"Lucro · margem {format_pct(kpis.margin_pct)}",
+            format_brl(kpis.total_profit, 0),
+            delta=change(kpis.total_profit, prev.total_profit) if has_prev else None,
+            delta_description=versus,
+            border=True,
+            chart_data=points(trend["profit"]),
+            chart_type="area",
+            help=f"Valor exato: {format_brl(kpis.total_profit)}",
+        )
+    c3.metric(
+        "Pedidos",
+        format_number(kpis.n_orders),
+        delta=change(kpis.n_orders, prev.n_orders) if has_prev else None,
+        delta_description=versus,
+        border=True,
+        chart_data=points(trend["orders"]),
+        chart_type="bar",
+    )
+    c4.metric(
+        "Ticket médio",
+        format_brl(kpis.avg_ticket),
+        delta=change(kpis.avg_ticket, prev.avg_ticket) if has_prev else None,
+        delta_description=versus,
+        border=True,
+        chart_data=points(trend["revenue"] / trend["orders"].where(trend["orders"] > 0)),
+        chart_type="line",
+    )
 
     # ---------- META ----------
     if goal > 0:
@@ -73,73 +139,134 @@ else:
         )
         st.progress(
             min(progress, 1.0),
-            text=escape_currency(f"🎯 {format_pct(progress * 100)} da meta de {format_brl(goal)} — {status}"),
+            text=escape_currency(f"Meta: {format_pct(progress * 100)} de {format_brl(goal)} atingidos — {status}"),
         )
 
-    st.write("")
+    # ---------- ABAS ----------
+    tab_trend, tab_mix, tab_change, tab_data = st.tabs(
+        [
+            ":material/show_chart: Evolução",
+            ":material/bar_chart: Composição",
+            ":material/waterfall_chart: Variação",
+            ":material/table_rows: Dados",
+        ],
+        key="overview_tab",  # mantém a aba aberta depois de um filtro por clique
+    )
 
-    # ---------- GRÁFICOS ----------
-    col_left, col_right = st.columns([2, 1])
-    with col_left:
-        st.plotly_chart(charts.revenue_profit_over_time(df_filtered, show_profit=dataset.has_cost))
-    with col_right:
-        st.plotly_chart(charts.revenue_by_category(kpis.revenue_by_category))
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.plotly_chart(charts.revenue_by_region(kpis.revenue_by_region))
-    with col_b:
-        st.plotly_chart(charts.top_products(df_filtered))
-
-    # ---------- COMPARAÇÃO E VARIAÇÃO ----------
-    st.subheader("🔎 Por que a receita mudou?")
-    if df_prev.empty:
-        st.info(f"Não há vendas no {comparison} para comparar.")
-    else:
-        previous_kpis = compute_sales_kpis(df_prev)
-        bridge = revenue_bridge(df_filtered, df_prev)
-        explanation = (
-            f"Comparação com o {comparison}: a receita variou **{format_brl(bridge.total_change)}**, que se "
-            f"decompõem em três efeitos: **volume** {format_brl(bridge.volume_effect)} (mais ou menos unidades "
-            f"vendidas), **preço** {format_brl(bridge.price_effect)} (preço médio de cada categoria) e **mix** "
-            f"{format_brl(bridge.mix_effect)} (venda migrando entre categorias mais caras ou mais baratas)."
+    with tab_trend:
+        granularity = st.segmented_control(
+            "Agrupar por",
+            options=list(charts.GRANULARITIES),
+            format_func=charts.GRANULARITIES.get,
+            default="D",
+            required=True,
+            key="granularity",
+            persist_state="session",
         )
-        st.caption(escape_currency(explanation))
+        title = "Receita e lucro" if dataset.has_cost else "Receita"
+        chart_card(
+            f"{title} por {charts.GRANULARITIES[granularity].lower()}",
+            charts.revenue_over_time(df_filtered, show_profit=dataset.has_cost, granularity=granularity),
+            caption=(
+                f"Linha forte: média móvel de {charts.MOVING_AVERAGE_DAYS} dias. Linha clara: valor de cada dia."
+                if granularity == "D"
+                else "Semanas e meses nas pontas do período podem estar incompletos."
+            ),
+        )
 
-        def comparison_table(current: SalesKPIs, previous: SalesKPIs) -> pd.DataFrame:
-            def row(name, now, before, fmt, pct_points=False):
-                if now is None or before is None:
-                    return [name, "—", "—", "—"]
-                if pct_points:
-                    change = f"{format_number(now - before, 1)} p.p."
-                else:
-                    change = format_pct((now - before) / before * 100, signed=True) if before else "—"
-                return [name, fmt(now), fmt(before), change]
-
-            rows = [
-                row("Receita", current.total_revenue, previous.total_revenue, format_brl),
-                row("Lucro", current.total_profit, previous.total_profit, format_brl),
-                row("Margem", current.margin_pct, previous.margin_pct, format_pct, pct_points=True),
-                row("Pedidos", current.n_orders, previous.n_orders, format_number),
-                row("Unidades", current.total_units, previous.total_units, format_number),
-                row("Ticket médio", current.avg_ticket, previous.avg_ticket, format_brl),
-            ]
-            return pd.DataFrame(rows, columns=["Indicador", "Período atual", "Comparação", "Variação"])
-
-        col_table, col_bridge = st.columns([2, 3])
-        with col_table:
-            st.markdown(
-                f"**Período atual x {comparison}**  \n"
-                f"<small>{df_prev['date'].min():%d/%m/%Y} a {df_prev['date'].max():%d/%m/%Y} na comparação</small>",
-                unsafe_allow_html=True,
+    with tab_mix:
+        st.caption(":material/touch_app: Clique em uma barra de categoria ou região para filtrar o dashboard inteiro.")
+        col_cat, col_region = st.columns(2)
+        with col_cat:
+            key = filters.chart_key(filters.P_CATEGORIES)
+            chart_card(
+                "Receita por categoria",
+                charts.revenue_by_category(kpis.revenue_by_category),
+                caption=f"Líder: {kpis.top_category} ({format_brl(kpis.top_category_revenue, 0)})",
+                key=key,
+                on_select=lambda key=key: filters.select_segment(filters.P_CATEGORIES, dataset_key, key),
             )
-            st.dataframe(comparison_table(kpis, previous_kpis), hide_index=True, width="stretch")
-            st.plotly_chart(charts.bridge_by_segment(bridge.by_segment))
-        with col_bridge:
-            st.plotly_chart(charts.revenue_bridge(bridge))
+        with col_region:
+            key = filters.chart_key(filters.P_REGIONS)
+            chart_card(
+                "Receita por região",
+                charts.revenue_by_region(kpis.revenue_by_region),
+                caption=f"Líder: {kpis.top_region}",
+                key=key,
+                on_select=lambda key=key: filters.select_segment(filters.P_REGIONS, dataset_key, key),
+            )
+        chart_card("Produtos com maior receita", charts.top_products(df_filtered))
 
-    with st.expander("🔍 Ver dados brutos filtrados"):
-        st.dataframe(df_filtered)
+    with tab_change:
+        if previous_kpis is None:
+            st.info(f"Não há vendas no {comparison} para comparar.", icon=":material/info:")
+        else:
+            bridge = revenue_bridge(df_filtered, df_prev)
+            st.markdown(
+                escape_currency(
+                    f"Em relação ao {comparison}, a receita variou **{format_brl(bridge.total_change)}**. "
+                    f"A variação se divide em três efeitos: **volume** {format_brl(bridge.volume_effect)} "
+                    f"(mais ou menos unidades vendidas), **preço** {format_brl(bridge.price_effect)} (preço médio "
+                    f"de cada categoria) e **mix** {format_brl(bridge.mix_effect)} (venda migrando entre "
+                    "categorias mais caras ou mais baratas)."
+                )
+            )
+
+            def comparison_table(current: SalesKPIs, previous: SalesKPIs) -> pd.DataFrame:
+                def row(name, now, before, fmt, pct_points=False):
+                    if now is None or before is None:
+                        return [name, "—", "—", "—"]
+                    if pct_points:
+                        variation = f"{format_number(now - before, 1)} p.p."
+                    else:
+                        variation = format_pct((now - before) / before * 100, signed=True) if before else "—"
+                    return [name, fmt(now), fmt(before), variation]
+
+                rows = [
+                    row("Receita", current.total_revenue, previous.total_revenue, format_brl),
+                    row("Lucro", current.total_profit, previous.total_profit, format_brl),
+                    row("Margem", current.margin_pct, previous.margin_pct, format_pct, pct_points=True),
+                    row("Pedidos", current.n_orders, previous.n_orders, format_number),
+                    row("Unidades", current.total_units, previous.total_units, format_number),
+                    row("Ticket médio", current.avg_ticket, previous.avg_ticket, format_brl),
+                ]
+                return pd.DataFrame(rows, columns=["Indicador", "Período atual", "Comparação", "Variação"])
+
+            col_bridge, col_segment = st.columns(2)
+            with col_bridge:
+                chart_card(
+                    "Da receita anterior à atual",
+                    charts.revenue_bridge(bridge),
+                    caption="Eixo ampliado em torno da variação (não começa em zero).",
+                )
+            with col_segment:
+                chart_card(
+                    "Variação por categoria",
+                    charts.bridge_by_segment(bridge.by_segment),
+                    caption="Passe o mouse para ver a divisão em volume, preço e mix de cada categoria.",
+                )
+            with st.container(border=True):
+                st.markdown("**Período atual x comparação**")
+                st.caption(f"Comparação: {df_prev['date'].min():%d/%m/%Y} a {df_prev['date'].max():%d/%m/%Y}")
+                st.dataframe(comparison_table(kpis, previous_kpis), hide_index=True, width="stretch")
+
+    with tab_data:
+        columns = [c for c in DATA_COLUMNS if c in df_filtered.columns and df_filtered[c].notna().any()]
+        st.caption(f"{format_number(len(df_filtered))} pedidos no período e filtros atuais.")
+        st.dataframe(
+            df_filtered[columns].sort_values("date", ascending=False),
+            column_config={c: DATA_COLUMNS[c] for c in columns},
+            hide_index=True,
+            width="stretch",
+            height=420,
+        )
+        st.download_button(
+            "Baixar estes dados (CSV)",
+            data=df_filtered[columns].to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
+            file_name="vendas_filtradas.csv",
+            mime="text/csv",
+            icon=":material/download:",
+        )
 
 report_section(
     lambda: (

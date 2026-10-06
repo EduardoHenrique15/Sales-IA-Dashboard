@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="40" viewBox="0 0 236 40" role="img" aria-label="Insight Engine">
+  <rect x="2" y="2" width="36" height="36" rx="9" fill="#3987e5"/>
+  <rect x="10" y="21" width="5" height="10" rx="1.5" fill="#ffffff"/>
+  <rect x="17.5" y="15" width="5" height="16" rx="1.5" fill="#ffffff"/>
+  <rect x="25" y="9" width="5" height="22" rx="1.5" fill="#ffffff" fill-opacity="0.72"/>
+  <text x="48" y="27" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="700" fill="#3987e5">Insight Engine</text>
+</svg>

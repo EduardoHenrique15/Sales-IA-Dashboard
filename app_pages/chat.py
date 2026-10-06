@@ -10,7 +10,7 @@ from insight_engine.ai.chat import MAX_QUESTION_CHARS, ChatTurn, SalesDataTools,
 from insight_engine.ai.providers.base import ChatMessage
 from insight_engine.ui import datasets
 from insight_engine.ui.ai_access import ai_access
-from insight_engine.ui.components import escape_currency, verified_message
+from insight_engine.ui.components import escape_currency, page_header, verified_message
 
 EXAMPLES = [
     "Qual região teve a menor receita em 2025?",
@@ -19,21 +19,26 @@ EXAMPLES = [
     "Quanto devemos vender nos próximos 30 dias?",
 ]
 
+AVATARS = {"user": ":material/person:", "assistant": ":material/insights:"}
+
 dataset = datasets.active_dataset()
-st.title("💬 Converse com os dados")
-st.caption(
+page_header(
+    "Converse com os dados",
     "Pergunte em linguagem natural. A IA responde consultando funções de análise pré-definidas e "
-    f"seguras — ela não executa código.  •  Base: {dataset.name}"
+    f"seguras — ela não executa código. · Base: {dataset.name}",
+    icon=":material/forum:",
 )
 
 access = ai_access()
 if access.provider is None:
     st.info(
-        "O chat precisa da IA generativa. Informe uma chave do Gemini na barra lateral "
-        "(gratuita em aistudio.google.com) ou configure `GEMINI_API_KEY` no servidor."
-        + (f" Motivo: {access.provider_error}" if access.provider_error else "")
+        "O chat precisa da IA generativa. Informe uma chave do Gemini em **Inteligência artificial**, na barra "
+        "lateral (gratuita em aistudio.google.com), ou configure `GEMINI_API_KEY` no servidor."
+        + (f" Motivo: {access.provider_error}" if access.provider_error else ""),
+        icon=":material/key:",
     )
-    st.markdown("**Exemplos do que você poderá perguntar:**\n" + "\n".join(f"- {q}" for q in EXAMPLES))
+    with st.container(border=True):
+        st.markdown("**Exemplos do que você poderá perguntar:**\n" + "\n".join(f"- {q}" for q in EXAMPLES))
     st.stop()
 
 tools = SalesDataTools(dataset.df, has_cost=dataset.has_cost, has_customers=dataset.has_customers)
@@ -43,7 +48,7 @@ conversation: list[tuple[ChatMessage, ChatTurn | None]] = st.session_state.setde
 
 def show_details(turn: ChatTurn) -> None:
     if turn.tool_calls:
-        with st.expander(f"🔧 Consultas feitas ({len(turn.tool_calls)})"):
+        with st.expander(f"Consultas feitas ({len(turn.tool_calls)})", icon=":material/build:"):
             for call in turn.tool_calls:
                 st.markdown(f"**{call.name}** — parâmetros: `{json.dumps(call.args, ensure_ascii=False)}`")
                 st.json(call.result, expanded=False)
@@ -51,14 +56,18 @@ def show_details(turn: ChatTurn) -> None:
     if check is not None and check.checked:
         if check.ok:
             verb = "confere" if check.checked == 1 else "conferem"
-            st.caption(f"✅ {verified_message(check.checked)} na resposta {verb} com as consultas.")
+            st.caption(f":material/fact_check: {verified_message(check.checked)} na resposta {verb} com as consultas.")
         else:
-            st.caption(escape_currency(f"🔎 Números não encontrados nas consultas: {', '.join(check.unverified)}"))
+            st.caption(
+                escape_currency(
+                    f":material/search: Números não encontrados nas consultas: {', '.join(check.unverified)}"
+                )
+            )
 
 
 # ---------- HISTÓRICO ----------
 for message, turn in conversation:
-    with st.chat_message(message.role):
+    with st.chat_message(message.role, avatar=AVATARS[message.role]):
         st.markdown(escape_currency(message.text))
         if turn is not None:
             show_details(turn)
@@ -66,22 +75,28 @@ for message, turn in conversation:
 # ---------- NOVA PERGUNTA ----------
 clicked = None
 if not conversation:
-    st.markdown("**Experimente perguntar:**")
-    grid = st.columns(2)
-    for i, example in enumerate(EXAMPLES):
-        if grid[i % 2].button(example, width="stretch", key=f"example_{i}"):
-            clicked = example
+    with st.chat_message("assistant", avatar=AVATARS["assistant"]):
+        st.markdown(
+            "Olá! Posso responder perguntas sobre **receita, lucro, categorias, regiões, clientes, anomalias "
+            "e previsão** desta base. Cada número da resposta vem de uma consulta aos dados, que você pode "
+            "conferir em **Consultas feitas**."
+        )
+        clicked = st.pills(
+            "Experimente perguntar", EXAMPLES, key=f"example_{len(conversation)}", label_visibility="visible"
+        )
 question = st.chat_input("Pergunte sobre as vendas...", max_chars=MAX_QUESTION_CHARS) or clicked
 
-if conversation and st.sidebar.button("🗑️ Limpar conversa"):
-    st.session_state[state_key] = []
-    st.rerun()
+if conversation:
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        if st.button("Limpar conversa", icon=":material/delete_sweep:", type="tertiary", key="clear_chat"):
+            st.session_state[state_key] = []
+            st.rerun()
 
 if question:
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=AVATARS["user"]):
         st.markdown(escape_currency(question))
 
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=AVATARS["assistant"]):
         if access.allow_call is not None and not access.allow_call():
             answer = f"Não consegui responder: {access.limit_message}"
             st.warning(answer)
