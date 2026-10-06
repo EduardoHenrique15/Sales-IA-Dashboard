@@ -33,9 +33,6 @@ page = st.navigation(
             st.Page("app_pages/chat.py", title="Converse com os dados", icon="💬", url_path="chat"),
             st.Page("app_pages/upload.py", title="Importar dados", icon="📤", url_path="importar"),
         ],
-        "Mercado": [
-            st.Page("app_pages/crypto.py", title="Criptomoedas", icon="🪙", url_path="criptomoedas"),
-        ],
     }
 )
 

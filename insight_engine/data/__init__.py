@@ -1,1 +1,1 @@
-"""Camada de dados: fontes (vendas sintéticas, CoinGecko) e validação de esquema."""
+"""Camada de dados: fontes (base sintética e arquivos enviados) e validação de esquema."""

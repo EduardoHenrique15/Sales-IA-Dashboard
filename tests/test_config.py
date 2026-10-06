@@ -5,7 +5,6 @@ def test_valores_padrao_quando_nada_configurado():
     assert config.get_gemini_api_key() is None
     assert config.get_gemini_model() == config.DEFAULT_GEMINI_MODEL
     assert config.get_gemini_fallback_model() == config.DEFAULT_GEMINI_FALLBACK_MODEL
-    assert config.get_coingecko_api_key() is None
 
 
 def test_le_variaveis_de_ambiente(monkeypatch):

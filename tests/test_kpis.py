@@ -1,7 +1,6 @@
-import pandas as pd
 import pytest
 
-from insight_engine.analytics.kpis import CryptoKPIs, SalesKPIs, compute_crypto_kpis, compute_sales_kpis
+from insight_engine.analytics.kpis import SalesKPIs, compute_sales_kpis
 
 
 class TestSalesKPIs:
@@ -40,23 +39,6 @@ class TestSalesKPIs:
     def test_e_imutavel(self):
         with pytest.raises(AttributeError):
             SalesKPIs().total_revenue = 1  # type: ignore[misc]
-
-
-class TestCryptoKPIs:
-    def test_valores_calculados_a_mao(self):
-        df = pd.DataFrame({"price": [100.0, 110.0, 99.0], "volume": [10.0, 20.0, 30.0]})
-        kpis = compute_crypto_kpis(df)
-
-        assert kpis.current_price == 99
-        assert kpis.period_change_pct == pytest.approx(-1)
-        assert kpis.max_price == 110
-        assert kpis.min_price == 99
-        assert kpis.avg_volume == 20
-        # retornos diários: +10% e -10%; desvio padrão amostral = 14,14%
-        assert kpis.volatility_pct == pytest.approx(14.1421, rel=1e-4)
-
-    def test_dados_vazios(self):
-        assert compute_crypto_kpis(pd.DataFrame()) == CryptoKPIs()
 
 
 def test_sem_custo_lucro_e_margem_ficam_indisponiveis(small_sales_df):

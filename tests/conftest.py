@@ -8,9 +8,10 @@ requisição HTTP não simulada falha imediatamente.
 
 from __future__ import annotations
 
+import socket
+
 import pandas as pd
 import pytest
-import requests
 
 from insight_engine import config
 from insight_engine.data.sales import load_sales_data
@@ -19,7 +20,6 @@ SETTINGS = [
     "GEMINI_API_KEY",
     "GEMINI_MODEL",
     "GEMINI_FALLBACK_MODEL",
-    "COINGECKO_API_KEY",
     "LOG_LEVEL",
     "SERVER_KEY_CALLS_PER_HOUR",
     "SERVER_KEY_CALLS_PER_DAY",
@@ -36,12 +36,16 @@ def isolated_settings(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Bloqueia requisições HTTP reais; cada teste simula o que precisar."""
+    """Bloqueia conexões de saída (Gemini ou qualquer outra API); só a máquina local é permitida."""
+    original_connect = socket.socket.connect
 
-    def blocked(*args, **kwargs):
-        raise RuntimeError("Acesso à rede bloqueado nos testes")
+    def guarded_connect(self, address):
+        host = address[0] if isinstance(address, tuple) else address
+        if host not in ("127.0.0.1", "localhost", "::1") and not str(host).startswith("/"):
+            raise RuntimeError(f"Acesso à rede bloqueado nos testes: {host}")
+        return original_connect(self, address)
 
-    monkeypatch.setattr(requests, "get", blocked)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
 
 @pytest.fixture(scope="session")

@@ -37,12 +37,18 @@ coverage==7.16.2
     # via pytest-cov
 cryptography==50.0.2
     # via google-auth
+defusedxml==0.7.1
+    # via fpdf2
 distro==1.9.0
     # via google-genai
 et-xmlfile==2.0.0
     # via openpyxl
+fonttools==4.66.1
+    # via fpdf2
 formulaic==1.2.2
     # via statsmodels
+fpdf2==2.8.9
+    # via insight-engine (pyproject.toml)
 google-auth==2.60.0
     # via google-genai
 google-genai==2.28.0
@@ -140,7 +146,9 @@ pathspec==1.1.1
 patsy==1.0.3
     # via statsmodels
 pillow==12.3.0
-    # via streamlit
+    # via
+    #   fpdf2
+    #   streamlit
 plotly==7.1.0
     # via insight-engine (pyproject.toml)
 pluggy==1.6.0
@@ -186,7 +194,6 @@ referencing==0.37.0
     #   jsonschema-specifications
 requests==2.34.2
     # via
-    #   insight-engine (pyproject.toml)
     #   google-auth
     #   google-genai
     #   streamlit
@@ -230,8 +237,6 @@ tomli==2.4.1 ; python_full_version <= '3.11'
     # via coverage
 typeguard==4.6.0
     # via pandera
-types-requests==2.33.0.20260906
-    # via insight-engine (pyproject.toml)
 typing-extensions==4.16.0
     # via
     #   altair
@@ -255,9 +260,7 @@ typing-inspection==0.4.4
 tzdata==2026.5 ; sys_platform == 'emscripten' or sys_platform == 'win32'
     # via pandas
 urllib3==2.8.0
-    # via
-    #   requests
-    #   types-requests
+    # via requests
 uvicorn==0.54.0
     # via streamlit
 watchdog==6.0.0 ; sys_platform != 'darwin'

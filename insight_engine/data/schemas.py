@@ -32,16 +32,6 @@ SALES_SCHEMA = pa.DataFrameSchema(
     strict="filter",  # colunas extras são descartadas
 )
 
-CRYPTO_SCHEMA = pa.DataFrameSchema(
-    {
-        "date": pa.Column("datetime64[ns]", nullable=False, unique=True),
-        "price": pa.Column(float, pa.Check.gt(0)),
-        "volume": pa.Column(float, pa.Check.ge(0)),
-    },
-    coerce=True,
-    strict="filter",
-)
-
 
 class DataValidationError(ValueError):
     """Os dados não respeitam o esquema esperado."""

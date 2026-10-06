@@ -1,6 +1,6 @@
 import pytest
 
-from insight_engine.formatting import format_brl, format_number, format_pct, format_usd
+from insight_engine.formatting import format_brl, format_number, format_pct
 
 
 @pytest.mark.parametrize(
@@ -18,13 +18,10 @@ def test_format_number_usa_padrao_brasileiro(value, decimals, expected):
 
 def test_format_moedas():
     assert format_brl(2838404.99) == "R$ 2.838.404,99"
-    assert format_usd(0.5) == "US$ 0,50"
-    assert format_usd(1_000_000, 0) == "US$ 1.000.000"
 
 
 def test_moeda_negativa_tem_sinal_antes_do_simbolo():
     assert format_brl(-70512.08) == "-R$ 70.512,08"
-    assert format_usd(-5) == "-US$ 5,00"
 
 
 @pytest.mark.parametrize(

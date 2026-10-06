@@ -9,14 +9,15 @@ from insight_engine.analytics.anomalies import daily_series, monthly_seasonality
 from insight_engine.analytics.forecasting import BASELINE, InsufficientDataError
 from insight_engine.data.sales import PLANTED_ANOMALIES
 from insight_engine.formatting import format_brl, format_number, format_pct
-from insight_engine.ui import cached, charts, datasets
+from insight_engine.ui import cached, charts, datasets, filters
 
 dataset = datasets.active_dataset()
 df_all = dataset.df
 
 # ---------- FILTROS (barra lateral) ----------
-categories = st.sidebar.multiselect("Categorias", options=sorted(df_all["category"].unique()), default=[])
-regions = st.sidebar.multiselect("Regiões", options=sorted(df_all["region"].unique()), default=[])
+dataset_key = datasets.dataset_key(dataset)
+categories = filters.segment_filter(df_all, "category", "Categorias", filters.P_CATEGORIES, dataset_key)
+regions = filters.segment_filter(df_all, "region", "Regiões", filters.P_REGIONS, dataset_key)
 horizon = st.sidebar.radio("Horizonte da previsão", options=[30, 60, 90], format_func=lambda d: f"{d} dias")
 
 df = df_all

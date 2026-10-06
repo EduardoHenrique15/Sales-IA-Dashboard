@@ -54,7 +54,3 @@ def get_gemini_model() -> str:
 
 def get_gemini_fallback_model() -> str:
     return get_setting("GEMINI_FALLBACK_MODEL") or DEFAULT_GEMINI_FALLBACK_MODEL
-
-
-def get_coingecko_api_key() -> str | None:
-    return get_setting("COINGECKO_API_KEY")

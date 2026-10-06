@@ -16,10 +16,10 @@ import pandas as pd
 from insight_engine.analytics.anomalies import daily_series, detect_anomalies
 from insight_engine.analytics.customers import CustomerSegmentation, pareto_share, segment_customers
 from insight_engine.analytics.forecasting import ForecastResult, InsufficientDataError, forecast_revenue
-from insight_engine.analytics.kpis import CryptoKPIs, SalesKPIs
+from insight_engine.analytics.kpis import SalesKPIs
 from insight_engine.analytics.trends import MannKendall, Trend, declining_categories, fit_trend, mann_kendall
 from insight_engine.analytics.variance import RevenueBridge, revenue_bridge
-from insight_engine.formatting import format_brl, format_number, format_p_value, format_pct, format_usd
+from insight_engine.formatting import format_brl, format_number, format_p_value, format_pct
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,8 @@ class SalesFacts:
     period_label: str
     kpis: SalesKPIs
     trend: Trend
+    # ex.: "período anterior de mesma duração" ou "mesmo período do ano anterior"
+    comparison_label: str
     mann_kendall: MannKendall
     declining: list[tuple[str, float]]
     bridge: RevenueBridge | None
@@ -55,7 +57,7 @@ class SalesFacts:
             f"Pedidos: {format_number(k.n_orders)}",
             f"Unidades vendidas: {format_number(k.total_units)}",
             f"Ticket médio: {format_brl(k.avg_ticket)}",
-            "Crescimento da receita vs período anterior de mesma duração: "
+            f"Crescimento da receita vs {self.comparison_label}: "
             + (format_pct(k.revenue_growth_pct, signed=True) if k.revenue_growth_pct is not None else "não disponível"),
         ]
 
@@ -85,7 +87,7 @@ class SalesFacts:
         if self.bridge is not None:
             b = self.bridge
             lines.append(
-                f"Variação da receita vs período anterior: {format_brl(b.total_change)}, decomposta em "
+                f"Variação da receita vs {self.comparison_label}: {format_brl(b.total_change)}, decomposta em "
                 f"efeito volume {format_brl(b.volume_effect)}, efeito preço {format_brl(b.price_effect)} e "
                 f"efeito mix {format_brl(b.mix_effect)}"
             )
@@ -124,35 +126,6 @@ class SalesFacts:
         return lines
 
 
-@dataclass(frozen=True)
-class CryptoFacts:
-    period_label: str
-    coin_name: str
-    kpis: CryptoKPIs
-    trend: Trend
-    mann_kendall: MannKendall
-
-    @property
-    def drawdown_pct(self) -> float:
-        k = self.kpis
-        return (k.current_price - k.max_price) / k.max_price * 100 if k.max_price else 0.0
-
-    def to_lines(self) -> list[str]:
-        k, mk = self.kpis, self.mann_kendall
-        direction = {"alta": "alta", "queda": "baixa", "sem tendência": "sem tendência significativa"}[mk.direction]
-        return [
-            f"Ativo: {self.coin_name}; período: {self.period_label}",
-            f"Preço atual: {format_usd(k.current_price)}",
-            f"Variação no período: {format_pct(k.period_change_pct, 2, signed=True)}",
-            f"Máxima do período: {format_usd(k.max_price)}; mínima: {format_usd(k.min_price)}",
-            f"Distância do preço atual para a máxima: {format_pct(self.drawdown_pct, 1, signed=True)}",
-            f"Volume médio negociado: {format_usd(k.avg_volume, 0)}",
-            f"Volatilidade diária (desvio padrão dos retornos): {format_pct(k.volatility_pct, 2)}",
-            f"Tendência do preço (Mann-Kendall): {direction} ({format_p_value(mk.p_value)}); "
-            f"reta de regressão equivale a {format_pct(self.trend.slope_pct, signed=True)}",
-        ]
-
-
 def build_sales_facts(
     history: pd.DataFrame,
     period: pd.DataFrame,
@@ -160,6 +133,7 @@ def build_sales_facts(
     kpis: SalesKPIs,
     period_label: str,
     has_customers: bool = True,
+    comparison_label: str = "período anterior de mesma duração",
 ) -> SalesFacts:
     """Reúne os fatos do período selecionado.
 
@@ -195,6 +169,7 @@ def build_sales_facts(
     return SalesFacts(
         period_label=period_label,
         kpis=kpis,
+        comparison_label=comparison_label,
         trend=fit_trend(daily),
         mann_kendall=mann_kendall(daily),
         declining=declining_categories(period) if not period.empty else [],
@@ -203,8 +178,3 @@ def build_sales_facts(
         forecast=forecast,
         segmentation=segmentation,
     )
-
-
-def build_crypto_facts(df: pd.DataFrame, kpis: CryptoKPIs, period_label: str, coin_name: str) -> CryptoFacts:
-    prices = df.set_index("date")["price"] if not df.empty else pd.Series(dtype=float)
-    return CryptoFacts(period_label, coin_name, kpis, fit_trend(prices), mann_kendall(prices))

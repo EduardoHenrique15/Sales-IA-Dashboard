@@ -7,6 +7,8 @@ gravada em disco nem compartilhada com outros usuários.
 
 from __future__ import annotations
 
+import hashlib
+
 import streamlit as st
 
 from insight_engine.data.upload import SalesDataset
@@ -20,6 +22,11 @@ EXAMPLE_NAME = "Base de exemplo (sintética)"
 
 def example_dataset() -> SalesDataset:
     return SalesDataset(df=cached.sales_data(), name=EXAMPLE_NAME)
+
+
+def dataset_key(dataset: SalesDataset) -> str:
+    """Identificador curto da base, usado para separar o estado dos filtros por base."""
+    return hashlib.md5(dataset.name.encode()).hexdigest()[:8]
 
 
 def is_example(dataset: SalesDataset) -> bool:

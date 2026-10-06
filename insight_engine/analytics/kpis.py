@@ -36,16 +36,6 @@ class SalesKPIs:
     revenue_by_region: pd.Series = field(default_factory=_empty_series)
 
 
-@dataclass(frozen=True)
-class CryptoKPIs:
-    current_price: float = 0.0
-    period_change_pct: float = 0.0
-    max_price: float = 0.0
-    min_price: float = 0.0
-    avg_volume: float = 0.0
-    volatility_pct: float = 0.0
-
-
 def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None) -> SalesKPIs:
     """Calcula os KPIs principais de vendas para o período filtrado.
 
@@ -87,23 +77,4 @@ def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None
         revenue_growth_pct=revenue_growth_pct,
         revenue_by_category=revenue_by_category,
         revenue_by_region=revenue_by_region,
-    )
-
-
-def compute_crypto_kpis(df: pd.DataFrame) -> CryptoKPIs:
-    """Calcula KPIs para a série histórica de uma criptomoeda."""
-    if df.empty or "price" not in df.columns:
-        return CryptoKPIs()
-
-    current_price = float(df["price"].iloc[-1])
-    first_price = float(df["price"].iloc[0])
-    daily_returns = df["price"].pct_change().dropna()
-
-    return CryptoKPIs(
-        current_price=current_price,
-        period_change_pct=((current_price - first_price) / first_price * 100) if first_price else 0.0,
-        max_price=float(df["price"].max()),
-        min_price=float(df["price"].min()),
-        avg_volume=float(df["volume"].mean()) if "volume" in df.columns else 0.0,
-        volatility_pct=float(daily_returns.std() * 100) if not daily_returns.empty else 0.0,
     )

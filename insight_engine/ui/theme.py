@@ -9,11 +9,6 @@ import streamlit as st
 
 from insight_engine.formatting import PLOTLY_SEPARATORS
 
-# Paleta usada nos gráficos
-COLOR_REVENUE = "#818cf8"
-COLOR_PROFIT = "#34d399"
-COLOR_PRICE = "#fbbf24"
-
 # Paleta das análises (versão para fundo escuro da paleta categórica de referência,
 # validada para daltonismo: até 3 cores juntas passam em todas as checagens).
 SERIES_1 = "#3987e5"  # azul
@@ -27,8 +22,6 @@ MUTED_LINE = "#8a93b0"
 
 CUSTOM_CSS = """
 <style>
-    .main { background-color: #0e1117; }
-
     .kpi-card {
         background: linear-gradient(135deg, #1c2333 0%, #161b28 100%);
         border: 1px solid #2a3352;
@@ -66,8 +59,6 @@ CUSTOM_CSS = """
     }
     .badge-gemini { background: #1e3a2f; color: #34d399; border: 1px solid #2f6f4e; }
     .badge-fallback { background: #2a2440; color: #c4b5fd; border: 1px solid #4c3f7a; }
-
-    h1, h2, h3 { color: #f5f7ff; }
 </style>
 """
 
@@ -77,15 +68,13 @@ def inject_css() -> None:
 
 
 def apply_chart_theme(fig: go.Figure, title: str, height: int, **layout) -> go.Figure:
-    """Aplica o estilo padrão do dashboard a um gráfico Plotly."""
-    fig.update_layout(
-        title=title,
+    """Aplica o estilo padrão do dashboard a um gráfico Plotly (`layout` sobrescreve o padrão)."""
+    defaults = dict(
         template="plotly_dark",
         separators=PLOTLY_SEPARATORS,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        height=height,
         margin=dict(l=10, r=10, t=50, b=10),
-        **layout,
     )
+    fig.update_layout(title=title, height=height, **{**defaults, **layout})
     return fig

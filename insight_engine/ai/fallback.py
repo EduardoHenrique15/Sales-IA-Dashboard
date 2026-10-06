@@ -8,14 +8,12 @@ Usado quando não há chave do Gemini ou quando a API falha. Monta o mesmo
 
 from __future__ import annotations
 
-from insight_engine.ai.context import CryptoFacts, SalesFacts
+from insight_engine.ai.context import SalesFacts
 from insight_engine.ai.report import Action, ExecutiveReport, Risk
-from insight_engine.formatting import format_brl, format_number, format_p_value, format_pct, format_usd
+from insight_engine.formatting import format_brl, format_number, format_p_value, format_pct
 
 # Margem abaixo desta referência é sinalizada como ponto de atenção
 HEALTHY_MARGIN_PCT = 20
-# Volatilidade diária (desvio padrão dos retornos) considerada alta
-HIGH_VOLATILITY_PCT = 4
 # Participação da região líder acima da qual há risco de concentração
 CONCENTRATION_PCT = 30
 
@@ -33,7 +31,7 @@ def sales_report(facts: SalesFacts) -> ExecutiveReport:
 
     trend_word = {"alta": "crescimento", "queda": "queda", "sem tendência": "estabilidade"}[mk.direction]
     growth = (
-        f"{format_pct(k.revenue_growth_pct, signed=True)} vs o período anterior"
+        f"{format_pct(k.revenue_growth_pct, signed=True)} vs o {facts.comparison_label}"
         if k.revenue_growth_pct is not None
         else "sem período anterior comparável"
     )
@@ -188,57 +186,6 @@ def sales_report(facts: SalesFacts) -> ExecutiveReport:
             )
         )
     return ExecutiveReport(headline=headline, highlights=highlights[:4], risks=risks[:3], actions=actions[:5])
-
-
-def crypto_report(facts: CryptoFacts) -> ExecutiveReport:
-    k, mk = facts.kpis, facts.mann_kendall
-    trend_word = {"alta": "alta", "queda": "baixa", "sem tendência": "lateralização"}[mk.direction]
-    high_volatility = k.volatility_pct > HIGH_VOLATILITY_PCT
-
-    risks = [
-        Risk(
-            title="Volatilidade elevada" if high_volatility else "Volatilidade administrável",
-            evidence=f"Desvio padrão diário dos retornos de {format_pct(k.volatility_pct, 2)}.",
-            severity="alta" if high_volatility else "baixa",
-        ),
-        Risk(
-            title="Distância da máxima do período",
-            evidence=f"Preço {format_pct(facts.drawdown_pct, 1, signed=True)} em relação à máxima de "
-            f"{format_usd(k.max_price)}.",
-            severity="média" if facts.drawdown_pct < -10 else "baixa",
-        ),
-    ]
-    actions = [
-        Action(
-            action="Reforçar gestão de risco (stop-loss e tamanho de posição)"
-            if high_volatility
-            else "Manter o monitoramento da volatilidade",
-            rationale=f"Volatilidade diária de {format_pct(k.volatility_pct, 2)}.",
-            priority="alta" if high_volatility else "baixa",
-        ),
-        Action(
-            action=f"Usar a máxima ({format_usd(k.max_price)}) e a mínima ({format_usd(k.min_price)}) como referências",
-            rationale="Níveis recentes de resistência e suporte.",
-            priority="média",
-        ),
-        Action(
-            action="Confirmar a tendência com volume e indicadores on-chain antes de decisões relevantes",
-            rationale=f"O teste de Mann-Kendall indica {trend_word} ({format_p_value(mk.p_value)}).",
-            priority="média",
-        ),
-    ]
-    return ExecutiveReport(
-        headline=f"{facts.coin_name} variou {format_pct(k.period_change_pct, 2, signed=True)} no período e "
-        f"encerrou a {format_usd(k.current_price)}.",
-        highlights=[
-            f"Preço atual de {format_usd(k.current_price)}; máxima de {format_usd(k.max_price)} e mínima de "
-            f"{format_usd(k.min_price)}.",
-            f"Tendência de {trend_word} (Mann-Kendall, {format_p_value(mk.p_value)}).",
-            f"Volume médio negociado de {format_usd(k.avg_volume, 0)}.",
-        ],
-        risks=risks,
-        actions=actions,
-    )
 
 
 def no_data_report(period_label: str, dataset_name: str) -> ExecutiveReport:

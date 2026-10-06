@@ -31,3 +31,17 @@ def test_listas_vazias_significam_sem_filtro(sales_df):
 
 def test_rotulo_do_periodo():
     assert SalesFilters(as_date("2025-10-02"), as_date("2025-12-31")).period_label == "02/10/2025 a 31/12/2025"
+
+
+def test_comparacao_com_o_mesmo_periodo_do_ano_anterior(sales_df):
+    filters = SalesFilters(as_date("2025-12-01"), as_date("2025-12-31"), comparison="ano_anterior")
+    current, previous = filter_sales(sales_df, filters)
+    assert previous["date"].min() == pd.Timestamp("2024-12-01")
+    assert previous["date"].max() == pd.Timestamp("2024-12-31")
+    assert filters.comparison_label == "mesmo período do ano anterior"
+
+
+def test_comparacao_padrao_e_o_periodo_anterior():
+    assert SalesFilters(as_date("2025-01-01"), as_date("2025-01-31")).comparison_label == (
+        "período anterior de mesma duração"
+    )

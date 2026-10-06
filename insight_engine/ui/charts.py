@@ -8,22 +8,19 @@ pronta, com o estilo padrão de `theme.apply_chart_theme`.
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 
 from insight_engine.analytics.forecasting import ForecastResult
 from insight_engine.analytics.variance import RevenueBridge
 from insight_engine.formatting import format_number
 from insight_engine.ui.theme import (
-    COLOR_PRICE,
-    COLOR_PROFIT,
-    COLOR_REVENUE,
     MUTED_LINE,
     NEGATIVE,
     NEUTRAL,
     POSITIVE,
     SERIES_1,
     SERIES_2,
+    SERIES_3,
     apply_chart_theme,
 )
 
@@ -34,103 +31,84 @@ _HORIZONTAL_LEGEND = dict(orientation="h", yanchor="bottom", y=1.02, xanchor="ri
 # Vendas
 # ------------------------------------------------------------------
 def revenue_profit_over_time(df: pd.DataFrame, show_profit: bool = True) -> go.Figure:
-    daily = df.groupby(df["date"].dt.date).agg(revenue=("revenue", "sum"), profit=("profit", "sum")).reset_index()
+    daily = df.groupby(df["date"].dt.normalize()).agg(revenue=("revenue", "sum"), profit=("profit", "sum"))
 
     fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=daily["date"],
-            y=daily["revenue"],
-            name="Receita",
-            mode="lines",
-            line=dict(color=COLOR_REVENUE, width=3),
-            fill="tozeroy",
-            fillcolor="rgba(129,140,248,0.12)",
-        )
-    )
-    if show_profit:
+    series = [("revenue", "Receita", SERIES_1)] + ([("profit", "Lucro", SERIES_3)] if show_profit else [])
+    for column, name, color in series:
         fig.add_trace(
             go.Scatter(
-                x=daily["date"],
-                y=daily["profit"],
-                name="Lucro",
+                x=daily.index,
+                y=daily[column],
+                name=name,
                 mode="lines",
-                line=dict(color=COLOR_PROFIT, width=2, dash="dot"),
+                line=dict(color=color, width=2),
+                hovertemplate="%{x|%d/%m/%Y}: R$ %{y:,.2f}<extra>" + name + "</extra>",
             )
         )
-    title = "Receita e Lucro ao Longo do Tempo" if show_profit else "Receita ao Longo do Tempo"
-    return apply_chart_theme(fig, title, 380, legend=_HORIZONTAL_LEGEND)
+    fig.update_layout(hovermode="x unified")
+    fig.update_yaxes(tickformat=",.0f")
+    title = "Receita e lucro por dia" if show_profit else "Receita por dia"
+    return date_axis(apply_chart_theme(fig, title, 380, legend=_HORIZONTAL_LEGEND, showlegend=show_profit))
 
 
 def revenue_by_category(revenue: pd.Series) -> go.Figure:
-    data = revenue.rename_axis("category").reset_index(name="revenue")
-    fig = px.pie(
+    """Participação por categoria em barras (comparam valores próximos melhor que uma rosca)."""
+    data = revenue.sort_values()
+    total = data.sum() or 1
+    return _labeled_bars(
         data,
-        names="category",
-        values="revenue",
-        hole=0.55,
-        color_discrete_sequence=px.colors.sequential.Purples_r,
+        [f"{_short_brl(v)} ({format_number(v / total * 100, 1)}%)" for v in data.values],
+        "Receita por categoria",
+        380,
+        room=2.1,  # coluna estreita e rótulos longos (valor + participação)
     )
-    return apply_chart_theme(fig, "Receita por Categoria", 380, showlegend=True)
 
 
 def revenue_by_region(revenue: pd.Series) -> go.Figure:
-    data = revenue.rename_axis("region").reset_index(name="revenue")
-    fig = px.bar(
-        data,
-        x="region",
-        y="revenue",
-        color="revenue",
-        color_continuous_scale="Purples",
-        text_auto=".2s",
-    )
-    return apply_chart_theme(fig, "Receita por Região", 340, coloraxis_showscale=False)
+    data = revenue.sort_values()
+    return _labeled_bars(data, [_short_brl(v) for v in data.values], "Receita por região", 340)
 
 
 def top_products(df: pd.DataFrame, n: int = 8) -> go.Figure:
-    data = df.groupby("product")["revenue"].sum().sort_values(ascending=True).tail(n).reset_index()
-    fig = px.bar(
-        data,
-        x="revenue",
-        y="product",
-        orientation="h",
-        color="revenue",
-        color_continuous_scale="Blues",
-        text_auto=".2s",
-    )
-    return apply_chart_theme(fig, "Top Produtos por Receita", 340, coloraxis_showscale=False)
+    data = df.groupby("product")["revenue"].sum().sort_values(ascending=True).tail(n)
+    return _labeled_bars(data, [_short_brl(v) for v in data.values], f"Top {n} produtos por receita", 340)
 
 
-# ------------------------------------------------------------------
-# Criptomoedas
-# ------------------------------------------------------------------
-def price_over_time(df: pd.DataFrame, coin_name: str, days: int) -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=df["date"],
-            y=df["price"],
-            name="Preço (USD)",
-            mode="lines",
-            line=dict(color=COLOR_PRICE, width=3),
-            fill="tozeroy",
-            fillcolor="rgba(251,191,36,0.10)",
+def _labeled_bars(data: pd.Series, labels: list[str], title: str, height: int, room: float = 1.45) -> go.Figure:
+    """Barras horizontais de uma cor, com o valor escrito ao lado (o eixo numérico fica oculto)."""
+    fig = go.Figure(
+        go.Bar(
+            x=data.values,
+            y=data.index,
+            orientation="h",
+            marker=dict(color=SERIES_1),
+            text=labels,
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
         )
     )
-    return apply_chart_theme(fig, f"Preço de {coin_name} — {days} dias", 400)
+    # espaço à direita para os rótulos não serem cortados
+    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[0, data.max() * room])
+    return apply_chart_theme(fig, title, height, showlegend=False)
 
 
-def traded_volume(df: pd.DataFrame) -> go.Figure:
-    fig = px.bar(df, x="date", y="volume", color_discrete_sequence=[COLOR_REVENUE])
-    return apply_chart_theme(fig, "Volume Negociado (USD)", 280)
+def date_axis(fig: go.Figure) -> go.Figure:
+    """Datas do eixo x em formato numérico brasileiro, que se adapta ao zoom."""
+    fig.update_xaxes(
+        tickformatstops=[
+            dict(dtickrange=[None, 86_400_000 * 40], value="%d/%m"),
+            dict(dtickrange=[86_400_000 * 40, 86_400_000 * 300], value="%m/%Y"),
+            dict(dtickrange=[86_400_000 * 300, None], value="%Y"),
+        ]
+    )
+    return fig
 
 
 # ------------------------------------------------------------------
 # Análises: variação, previsão, anomalias, sazonalidade e clientes
 # ------------------------------------------------------------------
-_EFFECT_LABELS = {"volume": "Volume", "price": "Preço", "mix": "Mix"}
-
-
 def revenue_bridge(bridge: RevenueBridge) -> go.Figure:
     """Cascata: receita anterior -> efeitos volume/preço/mix -> receita atual."""
     effects = [bridge.volume_effect, bridge.price_effect, bridge.mix_effect]
@@ -148,8 +126,16 @@ def revenue_bridge(bridge: RevenueBridge) -> go.Figure:
             hovertemplate="%{x}: R$ %{y:,.2f}<extra></extra>",
         )
     )
-    fig.update_yaxes(rangemode="tozero")
-    return apply_chart_theme(fig, "Da receita anterior à atual", 380, showlegend=False)
+    # Eixo ampliado em torno da variação: com o eixo a partir de zero, efeitos de poucos
+    # por cento ficariam invisíveis ao lado dos totais. Os valores do eixo ficam visíveis
+    # (e o título avisa) para que o recorte seja explícito.
+    levels = [bridge.previous_revenue]
+    for effect in effects:
+        levels.append(levels[-1] + effect)
+    low, high = min(levels), max(levels)
+    pad = max((high - low) * 0.6, high * 0.02)
+    fig.update_yaxes(range=[max(0, low - pad), high + pad], tickformat=",.0f")
+    return apply_chart_theme(fig, "Da receita anterior à atual (eixo não começa em zero)", 380, showlegend=False)
 
 
 def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
@@ -161,6 +147,9 @@ def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
             y=data.index,
             orientation="h",
             marker=dict(color=[POSITIVE if v >= 0 else NEGATIVE for v in data["total"]]),
+            text=[_short_brl(v) for v in data["total"]],
+            textposition="outside",
+            cliponaxis=False,
             customdata=data[["volume", "price", "mix"]].to_numpy(),
             hovertemplate=(
                 "<b>%{y}</b><br>Variação: R$ %{x:,.2f}<br>Volume: R$ %{customdata[0]:,.2f}"
@@ -169,6 +158,8 @@ def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
         )
     )
     fig.add_vline(x=0, line=dict(color=NEUTRAL, width=1))
+    reach = data["total"].abs().max() * 1.6 or 1
+    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[-reach, reach])
     return apply_chart_theme(fig, "Variação por categoria", 380, showlegend=False)
 
 
@@ -210,7 +201,10 @@ def forecast(result: ForecastResult, history_days: int = 180) -> go.Figure:
         )
     )
     fig.update_layout(hovermode="x unified")
-    return apply_chart_theme(fig, "Receita diária: histórico recente e previsão", 420, legend=_HORIZONTAL_LEGEND)
+    fig.update_yaxes(tickformat=",.0f")
+    return date_axis(
+        apply_chart_theme(fig, "Receita diária: histórico recente e previsão", 420, legend=_HORIZONTAL_LEGEND)
+    )
 
 
 def anomalies(series: pd.Series, found: pd.DataFrame, value_label: str) -> go.Figure:
@@ -240,7 +234,9 @@ def anomalies(series: pd.Series, found: pd.DataFrame, value_label: str) -> go.Fi
                 ),
             )
         )
-    return apply_chart_theme(fig, f"{value_label} por dia e anomalias detectadas", 380, legend=_HORIZONTAL_LEGEND)
+    return date_axis(
+        apply_chart_theme(fig, f"{value_label} por dia e anomalias detectadas", 380, legend=_HORIZONTAL_LEGEND)
+    )
 
 
 def weekday_effect(profile: pd.Series) -> go.Figure:

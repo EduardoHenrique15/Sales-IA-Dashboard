@@ -7,7 +7,7 @@ import streamlit as st
 
 from insight_engine.analytics.customers import MIN_ACTIONABLE_K, pareto_share
 from insight_engine.formatting import format_brl, format_number, format_pct
-from insight_engine.ui import cached, charts, datasets
+from insight_engine.ui import cached, charts, datasets, filters
 
 ACTIVE_DAYS = 90
 
@@ -22,7 +22,8 @@ if not dataset.has_customers:
     st.stop()
 
 df_all = dataset.df
-regions = st.sidebar.multiselect("Regiões", options=sorted(df_all["region"].unique()), default=[])
+dataset_key = datasets.dataset_key(dataset)
+regions = filters.segment_filter(df_all, "region", "Regiões", filters.P_REGIONS, dataset_key)
 df = df_all[df_all["region"].isin(regions)] if regions else df_all
 
 try:

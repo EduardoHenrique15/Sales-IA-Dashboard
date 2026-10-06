@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from insight_engine.ai.context import build_crypto_facts, build_sales_facts
-from insight_engine.analytics.kpis import compute_crypto_kpis, compute_sales_kpis
+from insight_engine.ai.context import build_sales_facts
+from insight_engine.analytics.kpis import compute_sales_kpis
 from insight_engine.analytics.periods import SalesFilters, filter_sales
 from tests.helpers import as_date
 
@@ -39,12 +39,3 @@ def test_base_sem_custo_nem_cliente(small_sales_df):
     assert facts.segmentation is None
     assert facts.forecast is None  # histórico curto demais
     assert facts.bridge is None  # sem período anterior
-
-
-def test_fatos_de_cripto():
-    df = pd.DataFrame({"date": pd.date_range("2025-01-01", periods=10), "price": range(100, 110), "volume": 1.0})
-    facts = build_crypto_facts(df, compute_crypto_kpis(df), "10 dias", "Bitcoin (BTC)")
-    text = "\n".join(facts.to_lines())
-    assert "Preço atual: US$ 109,00" in text
-    assert "Tendência do preço (Mann-Kendall): alta" in text
-    assert facts.drawdown_pct == 0

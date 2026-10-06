@@ -11,7 +11,8 @@ from datetime import datetime
 import streamlit as st
 
 from insight_engine.ai.agent import SOURCE_LLM, ReportResult, generate_executive_summary
-from insight_engine.ai.context import CryptoFacts, SalesFacts
+from insight_engine.ai.context import SalesFacts
+from insight_engine.ai.report_pdf import render_pdf
 from insight_engine.ui.ai_access import GEMINI_KEY_STATE, ai_access, report_cache
 
 __all__ = ["GEMINI_KEY_STATE", "escape_currency", "footer", "kpi_card", "report_section"]
@@ -53,7 +54,7 @@ def kpi_card(label: str, value: str, delta: str | None = None, delta_positive: b
 
 
 def report_section(
-    build_facts: Callable[[], SalesFacts | CryptoFacts | None],
+    build_facts: Callable[[], SalesFacts | None],
     period_label: str,
     dataset_name: str,
     context: str = "",
@@ -106,11 +107,25 @@ def report_section(
 
     st.markdown(escape_currency(result.markdown))
 
-    st.download_button(
-        "⬇️ Baixar Relatório (Markdown)",
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    source = f"Gerado por {result.provider_name}" if result.source == SOURCE_LLM else "Motor estatístico local"
+    check = result.verification
+    check_label = f"Números verificados: {check.verified} de {check.checked}" if check and check.checked else None
+    col_pdf, col_md, _ = st.columns([1, 1, 3])
+    col_pdf.download_button(
+        "⬇️ Baixar PDF",
+        data=render_pdf(result.report, f"Relatório Executivo - {dataset_name}", period_label, source, check_label),
+        file_name=f"relatorio_executivo_{stamp}.pdf",
+        mime="application/pdf",
+        type="primary",
+        width="stretch",
+    )
+    col_md.download_button(
+        "⬇️ Baixar Markdown",
         data=result.markdown,
-        file_name=f"relatorio_executivo_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+        file_name=f"relatorio_executivo_{stamp}.md",
         mime="text/markdown",
+        width="stretch",
     )
 
 

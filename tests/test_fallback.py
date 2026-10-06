@@ -1,9 +1,8 @@
-import pandas as pd
 import pytest
 
 from insight_engine.ai import fallback
-from insight_engine.ai.context import build_crypto_facts, build_sales_facts
-from insight_engine.analytics.kpis import compute_crypto_kpis, compute_sales_kpis
+from insight_engine.ai.context import build_sales_facts
+from insight_engine.analytics.kpis import compute_sales_kpis
 from insight_engine.analytics.periods import SalesFilters, filter_sales
 from tests.helpers import as_date
 
@@ -54,14 +53,6 @@ def test_sem_custo_nao_fala_de_margem(small_sales_df):
     report = fallback.sales_report(facts)
     assert not any("margem" in h.lower() for h in report.highlights)
     assert "lucro" not in report.highlights[0]
-
-
-def test_relatorio_de_cripto_com_volatilidade_alta():
-    df = pd.DataFrame({"date": pd.date_range("2025-01-01", periods=4), "price": [100.0, 120.0, 90.0, 110.0]})
-    df["volume"] = 1.0
-    report = fallback.crypto_report(build_crypto_facts(df, compute_crypto_kpis(df), "4 dias", "BTC"))
-    assert report.risks[0].title == "Volatilidade elevada"
-    assert report.actions[0].priority == "alta"
 
 
 def test_relatorio_sem_dados():

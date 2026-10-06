@@ -20,7 +20,7 @@ from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
 
 from insight_engine.ai import fallback
-from insight_engine.ai.context import CryptoFacts, SalesFacts
+from insight_engine.ai.context import SalesFacts
 from insight_engine.ai.guardrail import Verification, verify
 from insight_engine.ai.prompts import REPORT_SYSTEM, build_report_prompt
 from insight_engine.ai.providers.base import LLMProvider
@@ -48,7 +48,7 @@ class ReportResult:
 
 
 def generate_executive_summary(
-    facts: SalesFacts | CryptoFacts | None,
+    facts: SalesFacts | None,
     dataset_name: str,
     period_label: str,
     provider: LLMProvider | None = None,
@@ -89,8 +89,7 @@ def generate_executive_summary(
                 logger.warning("Falha no LLM (%s), usando o motor local. Detalhe: %s", provider.name, exc)
                 reason = provider.describe_error(exc)
 
-    local = fallback.sales_report(facts) if isinstance(facts, SalesFacts) else fallback.crypto_report(facts)
-    return _local(local, reason)
+    return _local(fallback.sales_report(facts), reason)
 
 
 def _from_llm(report: ExecutiveReport, provider_name: str, facts_text: str, from_cache: bool = False) -> ReportResult:

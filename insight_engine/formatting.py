@@ -29,11 +29,6 @@ def format_brl(value: float, decimals: int = 2) -> str:
     return f"{sign}R$ {format_number(abs(value), decimals)}"
 
 
-def format_usd(value: float, decimals: int = 2) -> str:
-    sign = "-" if value < 0 else ""
-    return f"{sign}US$ {format_number(abs(value), decimals)}"
-
-
 def format_pct(value: float, decimals: int = 1, signed: bool = False) -> str:
     sign = "+" if signed else ""
     return _swap_separators(f"{value:{sign},.{decimals}f}") + "%"
