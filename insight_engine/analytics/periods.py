@@ -29,7 +29,7 @@ def filter_sales(df: pd.DataFrame, filters: SalesFilters) -> tuple[pd.DataFrame,
     dates = df["date"].dt.date
     current = df.loc[(dates >= filters.start) & (dates <= filters.end)]
     previous = previous_period_df(df, filters.start, filters.end)
-    return _apply_segments(current, filters), _apply_segments(previous, filters)
+    return apply_segments(current, filters), apply_segments(previous, filters)
 
 
 def previous_period_df(df: pd.DataFrame, start, end) -> pd.DataFrame:
@@ -47,7 +47,8 @@ def previous_period_df(df: pd.DataFrame, start, end) -> pd.DataFrame:
     return df.loc[mask]
 
 
-def _apply_segments(df: pd.DataFrame, filters: SalesFilters) -> pd.DataFrame:
+def apply_segments(df: pd.DataFrame, filters: SalesFilters) -> pd.DataFrame:
+    """Aplica só os filtros de categoria e região (sem filtro de data)."""
     if filters.categories:
         df = df[df["category"].isin(filters.categories)]
     if filters.regions:

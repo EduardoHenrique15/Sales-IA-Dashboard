@@ -6,8 +6,9 @@ from datetime import timedelta
 
 import streamlit as st
 
+from insight_engine.ai.context import build_sales_facts
 from insight_engine.analytics.kpis import compute_sales_kpis
-from insight_engine.analytics.periods import SalesFilters, filter_sales
+from insight_engine.analytics.periods import SalesFilters, apply_segments, filter_sales
 from insight_engine.analytics.variance import revenue_bridge
 from insight_engine.formatting import format_brl, format_number, format_pct
 from insight_engine.ui import charts, datasets
@@ -114,4 +115,20 @@ else:
     with st.expander("🔍 Ver dados brutos filtrados"):
         st.dataframe(df_filtered)
 
-report_section(df_filtered, kpis, filters.period_label, dataset_name="Vendas", context=dataset.name)
+report_section(
+    lambda: (
+        build_sales_facts(
+            history=apply_segments(df_all, filters),
+            period=df_filtered,
+            previous=df_prev,
+            kpis=kpis,
+            period_label=filters.period_label,
+            has_customers=dataset.has_customers,
+        )
+        if not df_filtered.empty
+        else None
+    ),
+    period_label=filters.period_label,
+    dataset_name="Vendas",
+    context=dataset.name,
+)

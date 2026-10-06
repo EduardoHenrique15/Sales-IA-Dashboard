@@ -125,3 +125,46 @@ def test_base_enviada_sem_custo_nem_cliente(app, small_sales_df):
     app.switch_page("app_pages/customers.py").run()
     assert not app.exception
     assert "não tem coluna de cliente" in app.info[0].value
+
+
+def test_relatorio_com_llm_mostra_a_checagem_de_numeros(app):
+    from insight_engine.ai.report import ExecutiveReport
+    from tests.helpers import FakeProvider
+
+    report = ExecutiveReport(
+        headline="Receita de R$ 2.838.404,99.", highlights=["Meta de R$ 9 milhões."], risks=[], actions=[]
+    )
+    with mock.patch("insight_engine.ui.ai_access.create_provider", return_value=(FakeProvider(report), None)):
+        app.run()
+        app.button[0].click().run()
+
+    assert not app.exception
+    assert any("Gerado por Fake" in m.value for m in app.markdown)
+    assert any("não aparecem nos dados" in w.value and "9 milhões" in w.value for w in app.warning)
+
+
+def test_chat_sem_chave_explica_o_que_falta(app):
+    app.run()
+    app.switch_page("app_pages/chat.py").run()
+    assert not app.exception
+    assert "precisa da IA generativa" in app.info[0].value
+
+
+def test_chat_com_provedor(app):
+    from tests.helpers import FakeProvider
+
+    provider = FakeProvider(
+        script=[
+            ("tool", "kpis", {"data_inicio": "2025-10-02", "data_fim": "2025-12-31"}),
+            ("text", "A receita foi de R$ 2.838.404,99."),
+        ]
+    )
+    with mock.patch("insight_engine.ui.ai_access.create_provider", return_value=(provider, None)):
+        app.run()
+        app.switch_page("app_pages/chat.py").run()
+        app.chat_input[0].set_value("Qual a receita do último trimestre?").run()
+
+    assert not app.exception
+    assert any("2.838.404,99" in m.value for m in app.chat_message[1].markdown)
+    assert any("Consultas feitas (1)" in e.label for e in app.expander)
+    assert any("confere com as consultas" in c.value for c in app.caption)

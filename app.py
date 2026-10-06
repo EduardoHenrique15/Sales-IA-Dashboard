@@ -30,6 +30,7 @@ page = st.navigation(
             st.Page("app_pages/sales.py", title="Visão geral", icon="📦", default=True),
             st.Page("app_pages/forecast.py", title="Previsão e anomalias", icon="📈", url_path="previsao"),
             st.Page("app_pages/customers.py", title="Clientes", icon="👥", url_path="clientes"),
+            st.Page("app_pages/chat.py", title="Converse com os dados", icon="💬", url_path="chat"),
             st.Page("app_pages/upload.py", title="Importar dados", icon="📤", url_path="importar"),
         ],
         "Mercado": [
@@ -45,8 +46,8 @@ st.sidebar.text_input(
     "Gemini API Key (opcional)",
     type="password",
     key=GEMINI_KEY_STATE,
-    help="Se vazio, usa a chave configurada no servidor; sem nenhuma chave, o relatório "
-    "executivo é gerado pelo motor estatístico local (scikit-learn), sem custo.",
+    help="Se vazio, usa a chave configurada no servidor (com limite de uso). Sem nenhuma chave, o relatório "
+    "é gerado pelo motor estatístico local, sem custo, e o chat fica indisponível.",
 )
 st.sidebar.divider()
 

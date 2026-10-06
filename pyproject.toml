@@ -1,6 +1,6 @@
 [project]
 name = "insight-engine"
-version = "0.4.0"
+version = "0.5.0"
 description = "Dashboard executivo de vendas com KPIs, gráficos interativos e relatórios gerados por IA."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -20,6 +20,7 @@ dependencies = [
     "statsmodels>=0.14",  # previsão (Holt-Winters) e decomposição (STL)
     "scipy>=1.11",  # teste de Mann-Kendall
     "openpyxl>=3.1",  # leitura de planilhas .xlsx enviadas
+    "pydantic>=2.6",  # saída estruturada do relatório de IA
 ]
 
 [project.optional-dependencies]

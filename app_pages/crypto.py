@@ -5,6 +5,7 @@ Página: Dashboard Executivo de Criptomoedas (dados reais da CoinGecko).
 import pandas as pd
 import streamlit as st
 
+from insight_engine.ai.context import build_crypto_facts
 from insight_engine.analytics.kpis import compute_crypto_kpis
 from insight_engine.data.crypto import COIN_OPTIONS, CryptoDataError
 from insight_engine.formatting import format_pct, format_usd
@@ -70,4 +71,10 @@ else:
     with st.expander("🔍 Ver dados brutos"):
         st.dataframe(df_crypto)
 
-report_section(df_crypto, kpis, f"últimos {days} dias", dataset_name="Criptomoedas")
+period_label = f"últimos {days} dias"
+report_section(
+    lambda: build_crypto_facts(df_crypto, kpis, period_label, coin_name) if not df_crypto.empty else None,
+    period_label=period_label,
+    dataset_name="Criptomoedas",
+    context=coin_name,
+)

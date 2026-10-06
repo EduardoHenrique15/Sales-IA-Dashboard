@@ -1,71 +1,69 @@
 import pandas as pd
+import pytest
 
 from insight_engine.ai import fallback
+from insight_engine.ai.context import build_crypto_facts, build_sales_facts
 from insight_engine.analytics.kpis import compute_crypto_kpis, compute_sales_kpis
-
-SECTIONS = ["## Destaques do Período", "## Diagnóstico de Pontos Críticos / Gargalos", "## Plano de Ação Estratégico"]
-
-
-def test_relatorio_de_vendas_tem_as_tres_secoes_e_os_numeros(small_sales_df):
-    kpis = compute_sales_kpis(small_sales_df)
-    report = fallback.sales_report(small_sales_df, kpis, "jan/2025")
-
-    for section in SECTIONS:
-        assert section in report
-    assert "**R$ 1.100,00**" in report
-    assert "**4 pedidos**" in report
-    assert "sem dado comparativo" in report
+from insight_engine.analytics.periods import SalesFilters, filter_sales
+from tests.helpers import as_date
 
 
-def test_margem_baixa_gera_alerta_e_acao(small_sales_df):
-    df = small_sales_df.assign(profit=small_sales_df["revenue"] * 0.1)
-    report = fallback.sales_report(df, compute_sales_kpis(df), "p")
-    assert "abaixo do ideal (10,0%)" in report
-    assert "Reavaliar política de custos" in report
+def facts_for(sales_df, start, end):
+    filters = SalesFilters(as_date(start), as_date(end))
+    period, previous = filter_sales(sales_df, filters)
+    return build_sales_facts(sales_df, period, previous, compute_sales_kpis(period, previous), filters.period_label)
 
 
-def test_categoria_em_queda_aparece_no_diagnostico_e_no_plano(sales_df):
-    df = sales_df[sales_df["date"] >= "2025-01-01"]
-    report = fallback.sales_report(df, compute_sales_kpis(df), "2025")
-    assert "**Moda**" in report.split("## Diagnóstico")[1]
-    assert "Revisar mix de produtos e campanhas de **Moda**" in report
+@pytest.fixture(scope="module")
+def q3_2024_report(sales_df):
+    return fallback.sales_report(facts_for(sales_df, "2024-07-01", "2024-09-30"))
+
+
+def test_relatorio_tem_a_estrutura_completa(q3_2024_report):
+    assert "R$ 1.742.745,97" in q3_2024_report.headline
+    assert 1 <= len(q3_2024_report.highlights) <= 4
+    assert 1 <= len(q3_2024_report.risks) <= 3
+    assert 1 <= len(q3_2024_report.actions) <= 5
+
+
+def test_usa_as_analises_da_parte_4(q3_2024_report):
+    risks = " ".join(r.title for r in q3_2024_report.risks)
+    actions = " ".join(a.action for a in q3_2024_report.actions)
+    assert "Queda em Moda" in risks
+    assert "Revisar mix de produtos e campanhas de Moda" in actions
+    assert "07/08/2024" in actions  # investigar o dia atípico
+    assert any("volume" in h and "mix" in h for h in q3_2024_report.highlights)
+    assert any("Mann-Kendall" in h for h in q3_2024_report.highlights)
+
+
+def test_reativacao_de_clientes_em_risco(q3_2024_report):
+    assert any("Em risco" in a.action for a in q3_2024_report.actions)
+
+
+def test_margem_baixa_vira_risco_e_acao(sales_df):
+    df = sales_df[sales_df["date"] >= "2025-10-01"]
+    df = df.assign(profit=df["revenue"] * 0.1)
+    facts = build_sales_facts(df, df, df.iloc[0:0], compute_sales_kpis(df), "p")
+    report = fallback.sales_report(facts)
+    assert any(r.title == "Margem abaixo do saudável" for r in report.risks)
+
+
+def test_sem_custo_nao_fala_de_margem(small_sales_df):
+    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
+    facts = build_sales_facts(df, df, df.iloc[0:0], compute_sales_kpis(df), "p", has_customers=False)
+    report = fallback.sales_report(facts)
+    assert not any("margem" in h.lower() for h in report.highlights)
+    assert "lucro" not in report.highlights[0]
 
 
 def test_relatorio_de_cripto_com_volatilidade_alta():
-    df = pd.DataFrame(
-        {"date": pd.date_range("2025-01-01", periods=4), "price": [100.0, 120.0, 90.0, 110.0], "volume": 1.0}
-    )
-    report = fallback.crypto_report(df, compute_crypto_kpis(df), "4 dias")
-
-    for section in SECTIONS:
-        assert section in report
-    assert "elevada, exigindo cautela redobrada" in report
-    assert "Reforçar disciplina de gestão de risco" in report
+    df = pd.DataFrame({"date": pd.date_range("2025-01-01", periods=4), "price": [100.0, 120.0, 90.0, 110.0]})
+    df["volume"] = 1.0
+    report = fallback.crypto_report(build_crypto_facts(df, compute_crypto_kpis(df), "4 dias", "BTC"))
+    assert report.risks[0].title == "Volatilidade elevada"
+    assert report.actions[0].priority == "alta"
 
 
 def test_relatorio_sem_dados():
     report = fallback.no_data_report("jan/2025", "Vendas")
-    assert "Não há dados de **Vendas**" in report
-    for section in SECTIONS:
-        assert section in report
-
-
-def test_tendencia_usa_o_teste_de_mann_kendall(sales_df):
-    df = sales_df[(sales_df["date"] >= "2025-10-02") & (sales_df["date"] <= "2025-12-31")]
-    report = fallback.sales_report(df, compute_sales_kpis(df), "p")
-    assert "teste de Mann-Kendall: tendência significativa, p = 0,0" in report
-    assert "indica **crescimento**" in report
-
-
-def test_serie_sem_tendencia_e_descrita_como_estabilidade(small_sales_df):
-    report = fallback.sales_report(small_sales_df, compute_sales_kpis(small_sales_df), "p")
-    assert "indica **estabilidade**" in report
-    assert "tendência não significativa" in report
-
-
-def test_relatorio_sem_custo(small_sales_df):
-    df = small_sales_df.assign(cost=float("nan"), profit=float("nan"))
-    report = fallback.sales_report(df, compute_sales_kpis(df), "p")
-    assert "lucro e margem indisponíveis" in report
-    assert "Margem de lucro:** não disponível" in report
-    assert "Reavaliar política de custos" not in report
+    assert "Não há dados de Vendas" in report.headline

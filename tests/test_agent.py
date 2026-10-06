@@ -1,66 +1,76 @@
-from unittest import mock
-
 import pytest
 
-from insight_engine.ai import agent, gemini
+from insight_engine.ai import agent
+from insight_engine.ai.context import build_sales_facts
+from insight_engine.ai.limits import BoundedCache
+from insight_engine.ai.report import ExecutiveReport
 from insight_engine.analytics.kpis import compute_sales_kpis
+from insight_engine.analytics.periods import SalesFilters, filter_sales
+from tests.helpers import FakeProvider, as_date
 
 
-@pytest.fixture
-def kpis(small_sales_df):
-    return compute_sales_kpis(small_sales_df)
+@pytest.fixture(scope="module")
+def facts(sales_df):
+    filters = SalesFilters(as_date("2025-10-02"), as_date("2025-12-31"))
+    period, previous = filter_sales(sales_df, filters)
+    return build_sales_facts(sales_df, period, previous, compute_sales_kpis(period, previous), filters.period_label)
 
 
-def test_sem_chave_usa_o_relatorio_local_sem_aviso(small_sales_df, kpis):
-    result = agent.generate_executive_summary(small_sales_df, kpis, "p")
+def llm_report(*highlights: str) -> ExecutiveReport:
+    return ExecutiveReport(headline="Resumo", highlights=list(highlights), risks=[], actions=[])
+
+
+def generate(facts, **kwargs):
+    return agent.generate_executive_summary(facts, "Vendas", "p", **kwargs)
+
+
+def test_sem_provedor_usa_o_motor_local_sem_aviso(facts):
+    result = generate(facts)
     assert result.source == agent.SOURCE_FALLBACK
     assert result.fallback_reason is None
+    assert result.verification is None
     assert "## Destaques do Período" in result.markdown
 
 
-def test_com_chave_usa_o_gemini(monkeypatch, small_sales_df, kpis):
-    generate = mock.Mock(return_value="## Texto do Gemini")
-    monkeypatch.setattr(gemini, "generate", generate)
-    monkeypatch.setenv("GEMINI_API_KEY", "chave-do-servidor")
+def test_com_provedor_usa_o_llm_e_confere_os_numeros(facts):
+    provider = FakeProvider(llm_report("Receita de R$ 2.838.404,99, alta de 31%.", "Meta de R$ 5 milhões."))
+    result = generate(facts, provider=provider)
 
-    result = agent.generate_executive_summary(small_sales_df, kpis, "p")
-
-    assert result.source == agent.SOURCE_GEMINI
-    assert result.markdown == "## Texto do Gemini"
-    assert generate.call_args.args[1] == "chave-do-servidor"
-    assert "R$ 1.100,00" in generate.call_args.args[0]  # o prompt leva os KPIs
+    assert result.source == agent.SOURCE_LLM
+    assert result.provider_name == "Fake"
+    assert "R$ 2.838.404,99" in provider.prompts[0]  # o prompt leva os fatos
+    assert result.verification.unverified == ["R$ 5 milhões"]
 
 
-def test_chave_da_barra_lateral_tem_prioridade(monkeypatch, small_sales_df, kpis):
-    generate = mock.Mock(return_value="ok")
-    monkeypatch.setattr(gemini, "generate", generate)
-    monkeypatch.setenv("GEMINI_API_KEY", "chave-do-servidor")
-
-    agent.generate_executive_summary(small_sales_df, kpis, "p", api_key="chave-digitada")
-    assert generate.call_args.args[1] == "chave-digitada"
-
-
-def test_falha_do_gemini_cai_no_relatorio_local_com_motivo(monkeypatch, small_sales_df, kpis):
-    monkeypatch.setattr(gemini, "generate", mock.Mock(side_effect=RuntimeError("falhou")))
-    result = agent.generate_executive_summary(small_sales_df, kpis, "p", api_key="x")
-
+def test_falha_do_llm_cai_no_motor_local_com_motivo(facts):
+    result = generate(facts, provider=FakeProvider(RuntimeError("caiu"), error_message="o serviço caiu."))
     assert result.source == agent.SOURCE_FALLBACK
-    assert "erro inesperado" in result.fallback_reason
-    assert "## Destaques do Período" in result.markdown
+    assert result.fallback_reason == "o serviço caiu."
 
 
-def test_sem_o_pacote_do_gemini(monkeypatch, small_sales_df, kpis):
-    monkeypatch.setattr(gemini, "GENAI_AVAILABLE", False)
-    result = agent.generate_executive_summary(small_sales_df, kpis, "p", api_key="x")
-    assert result.source == agent.SOURCE_FALLBACK
+def test_cache_evita_nova_chamada_para_os_mesmos_dados(facts):
+    provider, cache = FakeProvider(llm_report("ok")), BoundedCache()
+    first = generate(facts, provider=provider, cache=cache)
+    second = generate(facts, provider=provider, cache=cache)
+
+    assert provider.report_calls == 1
+    assert not first.from_cache and second.from_cache
+
+
+def test_limite_de_uso_atingido(facts):
+    provider = FakeProvider(llm_report("ok"))
+    result = generate(facts, provider=provider, allow_call=lambda: False, limit_message="limite atingido.")
+    assert provider.report_calls == 0
+    assert result.fallback_reason == "limite atingido."
+
+
+def test_motivo_do_provedor_indisponivel(facts):
+    result = generate(facts, provider_error="o pacote `google-genai` não está instalado.")
     assert "google-genai" in result.fallback_reason
 
 
-def test_sem_dados_nao_chama_o_gemini(monkeypatch, small_sales_df, kpis):
-    generate = mock.Mock()
-    monkeypatch.setattr(gemini, "generate", generate)
-
-    result = agent.generate_executive_summary(small_sales_df.iloc[0:0], kpis, "p", api_key="x")
-
-    generate.assert_not_called()
+def test_sem_dados_nao_chama_o_llm():
+    provider = FakeProvider(llm_report("ok"))
+    result = agent.generate_executive_summary(None, "Vendas", "jan/2025", provider=provider)
+    assert provider.report_calls == 0
     assert "Não há dados" in result.markdown

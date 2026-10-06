@@ -24,11 +24,14 @@ def format_number(value: float, decimals: int = 0) -> str:
 
 
 def format_brl(value: float, decimals: int = 2) -> str:
-    return f"R$ {format_number(value, decimals)}"
+    """Moeda brasileira; negativos com o sinal antes do símbolo: -R$ 1.234,56."""
+    sign = "-" if value < 0 else ""
+    return f"{sign}R$ {format_number(abs(value), decimals)}"
 
 
 def format_usd(value: float, decimals: int = 2) -> str:
-    return f"US$ {format_number(value, decimals)}"
+    sign = "-" if value < 0 else ""
+    return f"{sign}US$ {format_number(abs(value), decimals)}"
 
 
 def format_pct(value: float, decimals: int = 1, signed: bool = False) -> str:
