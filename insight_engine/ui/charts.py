@@ -17,6 +17,15 @@ from insight_engine.ui.theme import apply_chart_theme, palette
 
 _HORIZONTAL_LEGEND = dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, title=None)
 GRANULARITIES = {"D": "Dia", "W": "Semana", "M": "Mês"}
+# Rótulo dentro da barra quando cabe e fora quando a barra é curta: assim o texto
+# nunca sai da área do gráfico, qualquer que seja a largura da tela.
+_BAR_LABELS = dict(
+    textposition="auto",
+    textangle=0,
+    insidetextanchor="end",
+    insidetextfont=dict(color="white"),
+    cliponaxis=False,
+)
 MOVING_AVERAGE_DAYS = 7
 
 
@@ -80,7 +89,6 @@ def revenue_by_category(revenue: pd.Series) -> go.Figure:
         data,
         [f"{_short_brl(v)} ({format_number(v / total * 100, 1)}%)" for v in data.values],
         340,
-        room=1.75,  # rótulos longos (valor + participação)
     )
 
 
@@ -94,8 +102,8 @@ def top_products(df: pd.DataFrame, n: int = 8) -> go.Figure:
     return _labeled_bars(data, [_short_brl(v) for v in data.values], 340)
 
 
-def _labeled_bars(data: pd.Series, labels: list[str], height: int, room: float = 1.45) -> go.Figure:
-    """Barras horizontais de uma cor, com o valor escrito ao lado (o eixo numérico fica oculto)."""
+def _labeled_bars(data: pd.Series, labels: list[str], height: int) -> go.Figure:
+    """Barras horizontais de uma cor, com o valor escrito (o eixo numérico fica oculto)."""
     fig = go.Figure(
         go.Bar(
             x=data.values,
@@ -103,13 +111,12 @@ def _labeled_bars(data: pd.Series, labels: list[str], height: int, room: float =
             orientation="h",
             marker=dict(color=palette().series_1),
             text=labels,
-            textposition="outside",
-            cliponaxis=False,
             hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
+            **_BAR_LABELS,
         )
     )
-    # espaço à direita para os rótulos não serem cortados
-    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[0, data.max() * room])
+    # folga à direita para os rótulos das barras curtas, que ficam do lado de fora
+    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[0, data.max() * 1.3])
     fig.update_yaxes(ticksuffix="  ")
     return apply_chart_theme(fig, height, showlegend=False)
 
@@ -170,18 +177,22 @@ def bridge_by_segment(by_segment: pd.DataFrame) -> go.Figure:
             orientation="h",
             marker=dict(color=[p.positive if v >= 0 else p.negative for v in data["total"]]),
             text=[_short_brl(v) for v in data["total"]],
-            textposition="outside",
-            cliponaxis=False,
             customdata=data[["volume", "price", "mix"]].to_numpy(),
             hovertemplate=(
                 "<b>%{y}</b><br>Variação: R$ %{x:,.2f}<br>Volume: R$ %{customdata[0]:,.2f}"
                 "<br>Preço: R$ %{customdata[1]:,.2f}<br>Mix: R$ %{customdata[2]:,.2f}<extra></extra>"
             ),
+            **_BAR_LABELS,
         )
     )
     fig.add_vline(x=0, line=dict(color=p.neutral, width=1))
-    reach = data["total"].abs().max() * 1.6 or 1
-    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=False, range=[-reach, reach])
+    # Cada lado do zero ocupa só o espaço que os valores pedem (com um mínimo para o rótulo
+    # de uma barra curta): com um eixo simétrico, uma queda pequena desperdiçaria metade do gráfico.
+    gain, loss = max(data["total"].max(), 0.0), max(-data["total"].min(), 0.0)
+    floor = max(gain, loss, 1.0) * 0.3
+    fig.update_xaxes(
+        showticklabels=False, showgrid=False, zeroline=False, range=[-max(loss * 1.35, floor), max(gain * 1.35, floor)]
+    )
     fig.update_yaxes(ticksuffix="  ")
     return apply_chart_theme(fig, 380, showlegend=False)
 

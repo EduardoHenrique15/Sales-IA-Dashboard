@@ -1,135 +1,217 @@
-# 📊 Insight Engine — Dashboard Executivo com IA
+# Insight Engine — Dashboard Executivo de Vendas com IA
 
-**Transforme planilhas em decisões, em segundos.** Um dashboard interativo que consome dados automaticamente (vendas ou cotações de criptomoedas em tempo real), calcula KPIs de negócio e usa um **Agente de IA** para gerar, sozinho, um relatório executivo em linguagem natural — com diagnóstico de gargalos e plano de ação sugerido.
+[![CI](https://github.com/EduardoHenrique15/Sales-IA-Dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/EduardoHenrique15/Sales-IA-Dashboard/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB)
+![Streamlit](https://img.shields.io/badge/streamlit-1.65-FF4B4B)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
-Construído com **Streamlit + Pandas + Plotly + Google Gemini / scikit-learn**.
+Transforma uma planilha de vendas em um painel executivo: indicadores, variação explicada, previsão,
+detecção de anomalias e segmentação de clientes — com um **relatório escrito por IA em que cada número
+citado é conferido contra os dados**. Sem chave de IA, tudo continua funcionando com um motor estatístico local.
 
----
+**🔗 Demo:** _em breve (Streamlit Community Cloud)_
 
-## 🎯 O problema
-
-Empresas e profissionais perdem horas todos os meses analisando planilhas manualmente para entender tendências de vendas, mercado ou performance financeira. O dado existe — o que falta é **tempo e contexto** para transformá-lo em decisão.
-
-## 💡 A solução
-
-O **Insight Engine** automatiza esse pipeline inteiro:
-
-`Dados brutos → Métricas de negócio → Visualização interativa → Narrativa em linguagem natural`
-
-Em poucos cliques, qualquer pessoa (não só analistas de dados) filtra o período/categoria que interessa e recebe um **relatório executivo pronto**, com destaques, riscos e próximos passos sugeridos — como se tivesse um analista sênior de plantão 24/7.
+![Visão geral do dashboard](docs/img/visao-geral.png)
 
 ---
 
-## ✨ Principais funcionalidades
+## O que ele faz
 
-- **KPI Cards dinâmicos** — receita, lucro, margem, ticket médio, crescimento vs. período anterior, tudo recalculado em tempo real conforme os filtros.
-- **Gráficos interativos (Plotly)** — série temporal de receita/lucro, distribuição por categoria, ranking por região e top produtos.
-- **Duas fontes de dados plugáveis:**
-  - 📦 **Vendas** — base sintética realista (sazonalidade, tendência, ruído) gerada e cacheada localmente.
-  - 🪙 **Criptomoedas** — dados **reais**, consumidos automaticamente da API pública da CoinGecko (preço, volume, volatilidade).
-- **Agente de IA com fallback resiliente** — usa a API do Google Gemini quando disponível; se a chave não existir, a cota estourar (HTTP 429) ou a API falhar, o sistema recorre automaticamente a um **motor estatístico local** (regressão linear via scikit-learn + regras de negócio) para gerar o mesmo relatório, sem quebrar a experiência do usuário.
-- **Relatório Executivo estruturado** em Markdown: Destaques do Período, Diagnóstico de Pontos Críticos e Plano de Ação Estratégico — exportável em `.md`.
-- **Tratamento de erros de produção** — dados nulos, rate limit de API, timeouts de rede e ausência de dados no filtro são todos tratados sem quebrar a interface.
+| | |
+|---|---|
+| **Visão executiva** | KPIs com variação e minigráfico, meta de receita, comparação com o período anterior ou com o mesmo período do ano anterior. Filtros que viram link compartilhável e filtro por clique nos gráficos. |
+| **Variação explicada** | A mudança da receita decomposta em **volume, preço e mix** (análise PVM), no total e por categoria. |
+| **Previsão** | Três modelos competem em **backtesting**; vence o de menor erro, e os intervalos de confiança vêm dos erros reais. |
+| **Anomalias** | Decomposição **STL** + z-score robusto (MAD) + piso de materialidade, para apontar dias fora do padrão sem alarmes falsos. |
+| **Clientes** | Segmentos **RFM** com ação sugerida, comparados a grupos do **K-Means** escolhidos pelo coeficiente de silhueta. |
+| **Relatório com IA** | Gemini com **saída estruturada** (destaques, riscos por gravidade, ações por prioridade), exportável em PDF e Markdown. |
+| **Chat com os dados** | Perguntas em linguagem natural respondidas por **chamada de funções** seguras — a IA consulta, não executa código. |
+| **Seus dados** | Importação de CSV/Excel com mapeamento automático de colunas e números no formato brasileiro (`R$ 1.234,56`). |
 
----
-
-## 🏗️ Arquitetura
-
-```
-sales-ai-dashboard/
-│
-├── app.py              # Orquestração da UI (Streamlit) — filtros, KPI cards, gráficos
-├── data_loader.py       # Camada de dados: geração/cache de vendas + consumo da API CoinGecko
-├── kpi_engine.py         # Cálculo puro de métricas de negócio (reaproveitado pela IA)
-├── ai_agent.py            # Agente de IA: prompt + chamada Gemini + fallback estatístico
-├── requirements.txt
-├── .env.example
-├── .streamlit/
-│   └── config.toml        # Tema visual dark
-└── data/
-    └── sales_data.csv     # Cache gerado automaticamente na primeira execução
-```
-
-**Por que essa separação importa:** cada módulo tem uma única responsabilidade. `kpi_engine.py` é a **fonte única da verdade** dos números — tanto os cards visuais quanto o prompt de IA consomem exatamente os mesmos valores, garantindo que o texto gerado nunca contradiga o gráfico. Isso facilita testes unitários, manutenção e a troca de qualquer camada (ex: trocar Gemini por outro LLM, ou CSV por um banco de dados) sem tocar no restante do sistema.
-
-### Fluxo de decisão do Agente de IA
-
-```
-                 ┌───────────────────────┐
-                 │  Existe GEMINI_API_KEY? │
-                 └──────────┬────────────┘
-                       sim  │   não
-              ┌─────────────┘   └──────────────┐
-              ▼                                  ▼
-   ┌─────────────────────┐          ┌──────────────────────────┐
-   │  Chama Gemini API    │          │  Motor estatístico local  │
-   │  (com retry/backoff  │          │  (regressão linear +       │
-   │   em caso de 429)    │          │   regras de negócio)       │
-   └──────────┬───────────┘          └──────────────┬────────────┘
-              │  falhou após retries                 │
-              └────────────────►  fallback  ◄─────────┘
-                                     │
-                                     ▼
-                    Relatório Executivo em Markdown
-                 (mesma estrutura, independente da fonte)
-```
+<table>
+  <tr>
+    <td><img src="docs/img/relatorio.png" alt="Relatório executivo em cartões"></td>
+    <td><img src="docs/img/variacao.png" alt="Variação explicada em volume, preço e mix"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/previsao.png" alt="Previsão de receita com intervalos"></td>
+    <td><img src="docs/img/clientes.png" alt="Segmentação RFM e mapa de calor"></td>
+  </tr>
+</table>
 
 ---
 
-## 🚀 Como rodar localmente
+## Destaques técnicos
+
+**Uma única fonte de números.** O dashboard, o relatório e o chat leem os mesmos fatos calculados
+(`insight_engine/ai/context.py`). A IA só redige e escolhe o que destacar; ela não calcula.
+
+**IA verificável.** Um verificador extrai os números do texto da IA (`R$ 2,84 milhões`, `31,4%`...) e confere
+cada um contra os dados, com tolerância a arredondamento. A tela mostra "15 de 15 números conferidos" — ou
+avisa exatamente quais números não aparecem nos dados.
+
+**Resiliência.** Se o modelo principal falhar, o app tenta de novo com espera crescente, depois usa um modelo
+reserva e, por último, o motor estatístico local, que gera o **mesmo objeto de relatório** (um único
+renderizador para as duas origens). O motivo da falha aparece na tela.
+
+**Previsão avaliada como em produção.** Ingênuo sazonal (baseline), Holt-Winters e regressão com calendário
+são treinados só com o passado e testados em janelas que não viram (*rolling-origin*). Na base de exemplo:
+
+| Métrica (horizonte de 30 dias) | Resultado |
+|---|---|
+| Modelo escolhido | Regressão com calendário |
+| Erro diário (WAPE) | 33,3% |
+| Erro do **total** do período | ±6,8% |
+| Ganho sobre o baseline | 28,9% |
+
+O dia a dia de vendas é ruidoso (poucos pedidos caros mudam um dia inteiro), mas o total do mês é bem
+previsível — e é ele que importa para metas e estoque.
+
+**Anomalias validadas com gabarito.** A base sintética tem 3 anomalias plantadas (queda no checkout, campanha
+relâmpago, site fora do ar). Detectando em **pedidos por dia**, o método encontra **3 de 3** com 7 alertas em
+1.096 dias; em **receita**, só 1 de 3, porque poucos pedidos caros escondem o incidente. A lição virou padrão
+do app: pedidos é a métrica sugerida para incidentes.
+
+**Segmentação que se valida.** RFM (regras de negócio) e K-Means (não supervisionado, k escolhido pela
+silhueta a partir de 3) chegam a grupos parecidos — os 20% melhores clientes concentram 68% da receita.
+
+**Engenharia.**
+- Mais de 200 testes automatizados (pytest), incluindo a interface com `AppTest`, cobertura mínima de 90%.
+- CI no GitHub Actions em Python 3.11 e 3.12, com ruff (lint e formatação) e mypy.
+- Testes **nunca** usam chaves reais nem internet: qualquer conexão de saída é bloqueada.
+- Validação de dados com pandera; saída da IA validada com Pydantic; dependências travadas com `uv`.
+
+### Como a IA funciona
+
+```mermaid
+flowchart LR
+    A[Base de vendas<br/>validada com pandera] --> B[Análises<br/>KPIs · PVM · previsão<br/>anomalias · RFM]
+    B --> C[Dashboard<br/>Streamlit + Plotly]
+    B --> D[Fatos calculados]
+    D --> E{Chave do<br/>Gemini?}
+    E -- sim --> F[Gemini<br/>saída estruturada]
+    F -- falhou --> G[Modelo reserva]
+    G -- falhou --> H[Motor estatístico local]
+    E -- não --> H
+    F --> I[Checagem dos números]
+    G --> I
+    I --> J[Relatório em cartões<br/>PDF · Markdown]
+    H --> J
+```
+
+---
+
+## Como rodar localmente
+
+Requer Python 3.11 ou 3.12.
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/EduardoHenrique15/insight-engine.git
-cd insight-engine
+git clone https://github.com/EduardoHenrique15/Sales-IA-Dashboard.git
+cd Sales-IA-Dashboard
 
-# 2. Crie e ative um ambiente virtual
-python -m venv venv
-source venv/bin/activate    # Windows: venv\Scripts\activate
-
-# 3. Instale as dependências
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 4. (Opcional) Configure sua chave do Gemini para relatórios via IA generativa
-cp .env.example .env
-# edite o .env e cole sua GEMINI_API_KEY
-# sem chave, o app funciona normalmente com o fallback estatístico
-
-# 5. Rode o dashboard
 streamlit run app.py
 ```
 
-O app abre em `http://localhost:8501`. Na primeira execução, a base de vendas sintética é gerada e cacheada automaticamente em `data/sales_data.csv`.
+O app abre em `http://localhost:8501` com uma base de vendas sintética (2023 a 2025, cerca de 20 mil pedidos).
 
-> 🔑 Obtenha uma chave gratuita do Gemini em [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
+### IA generativa (opcional)
+
+Copie `.env.example` para `.env` e preencha a chave (gratuita em
+[aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)):
+
+```
+GEMINI_API_KEY=sua_chave
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Também dá para colar uma chave no painel **Inteligência artificial**, na barra lateral, sem salvar nada.
+
+| Variável | Padrão | Para que serve |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Ativa o relatório e o chat com IA |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Modelo principal |
+| `GEMINI_FALLBACK_MODEL` | `gemini-flash-lite-latest` | Modelo reserva se o principal falhar |
+| `SERVER_KEY_CALLS_PER_HOUR` | `20` | Limite por visitante da chave do projeto |
+| `SERVER_KEY_CALLS_PER_DAY` | `300` | Limite diário total da chave do projeto |
+| `LOG_LEVEL` | `INFO` | Detalhe dos logs no terminal |
+
+### Usando seus dados
+
+Em **Importar dados**, envie um CSV ou Excel com **um pedido por linha**. Só **data** e **receita** são
+obrigatórias; com **custo**, o app calcula lucro e margem; com **cliente**, libera a segmentação. As colunas
+são reconhecidas pelo nome (dá para ajustar) e há uma planilha-modelo para baixar. O arquivo fica só na sessão
+do navegador: não é salvo nem compartilhado.
 
 ---
 
-## 📈 Impacto de negócio
+## Estrutura
 
-| Antes | Com o Insight Engine |
-|---|---|
-| Horas analisando planilhas manualmente | Insights em segundos, com um clique |
-| Relatórios executivos escritos manualmente | Relatório gerado automaticamente por IA |
-| Análise depende de um analista disponível | Qualquer stakeholder autoatende via dashboard |
-| Risco de não identificar quedas a tempo | Diagnóstico automático de gargalos por categoria/região |
-| Decisão baseada em "achismo" | Plano de ação sugerido com base em dados reais |
+```
+app.py                     # configuração, navegação e barra lateral comum
+app_pages/                 # uma página por arquivo (visão geral, previsão, clientes, chat, importação, sobre)
+insight_engine/
+├── data/                  # base sintética, importação de planilhas e validação (pandera)
+├── analytics/             # KPIs, períodos, PVM, tendência, previsão, anomalias, RFM/K-Means
+├── ai/                    # contexto, prompts, relatório estruturado, verificador, chat, PDF, limites
+│   └── providers/         # interface LLMProvider + implementação do Gemini
+└── ui/                    # tema, gráficos, componentes, filtros e cache do Streamlit
+tests/                     # testes unitários e de interface (rede bloqueada)
+.streamlit/config.toml     # tema claro/escuro, fonte e cores
+```
 
-Esse tipo de automação é o que separa equipes que **reagem** a problemas das que **antecipam** — e é exatamente o tipo de ferramenta que squads de dados, produto e growth usam para escalar decisões sem escalar headcount.
+A lógica fica no pacote `insight_engine/` e as páginas só montam a tela. Trocar o Gemini por outro modelo é
+implementar a interface `LLMProvider` (`insight_engine/ai/providers/base.py`); nos testes, um provedor falso
+faz esse papel.
 
 ---
 
-## 🧠 Stack técnica
+## Desenvolvimento
 
-`Python` · `Streamlit` · `Pandas` · `NumPy` · `Plotly` · `scikit-learn` · `Google Gemini API` · `Requests` (integração com API pública CoinGecko)
+```bash
+pip install -r requirements-dev.txt
+
+pytest                     # testes (com cobertura: pytest --cov)
+ruff check .               # lint
+ruff format .              # formatação
+mypy                       # tipos
+```
+
+As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requirements.txt` e
+`requirements-dev.txt`, geradas com [uv](https://github.com/astral-sh/uv) (o comando está no topo de cada arquivo).
 
 ---
 
-## 🔮 Possíveis evoluções
+## Deploy no Streamlit Community Cloud
 
-- Autenticação multiusuário e persistência em banco de dados (PostgreSQL/Supabase).
-- Agendamento automático de relatórios por e-mail (diário/semanal).
-- Comparação de múltiplos ativos/categorias lado a lado.
-- Deploy em Streamlit Community Cloud com link público de demonstração.
+1. Em [share.streamlit.io](https://share.streamlit.io), crie um app a partir deste repositório, com `app.py`
+   como arquivo principal e **Python 3.12** nas opções avançadas.
+2. Em **Secrets**, cole o conteúdo de `.streamlit/secrets.toml.example` com a sua chave.
 
+Os limites de uso protegem a cota da chave do projeto contra visitantes; quem colar a própria chave no app usa
+a cota dela, sem limite.
 
+---
+
+## Limitações conhecidas
+
+- A base de exemplo é **sintética** (gerada com sazonalidade, tendência, ruído e anomalias plantadas): serve
+  para demonstrar o método, não descreve uma empresa real.
+- O chat precisa de uma chave do Gemini; o relatório funciona sem ela.
+- O limite por visitante vale por sessão (abrir outra aba recomeça a contagem); o limite diário total é o que
+  protege a cota de fato.
+- Ao trocar o tema claro/escuro pelo menu, as cores dos gráficos se ajustam na interação seguinte.
+
+---
+
+## Stack
+
+Python · Streamlit · pandas · NumPy · Plotly · statsmodels · scikit-learn · SciPy · pandera · Pydantic ·
+Google Gemini (`google-genai`) · fpdf2 · pytest · ruff · mypy · GitHub Actions
+
+## Licença
+
+[MIT](LICENSE) — Eduardo Henrique

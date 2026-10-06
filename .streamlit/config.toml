@@ -6,7 +6,7 @@ toolbarMode = "viewer"
 [theme]
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 baseRadius = "0.6rem"
-metricValueFontSize = "1.75rem"
+metricValueFontSize = "1.5rem"
 
 # Os dois temas usam a mesma identidade: azul como cor de destaque e a paleta
 # categórica validada para daltonismo (cada modo com seus tons).

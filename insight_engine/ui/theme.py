@@ -59,6 +59,8 @@ DARK = ChartPalette(
     sequential=("#161c28", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#b7d3f6"),
 )
 
+CHART_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
 # Barra de ferramentas dos gráficos: sem logo do Plotly e sem as ferramentas
 # de seleção livre, que confundem quem só quer ler o gráfico.
 PLOTLY_CONFIG = {
@@ -107,6 +109,9 @@ def apply_chart_theme(fig: go.Figure, height: int, title: str | None = None, **l
     que o envolve (ver `components.chart_card`).
     """
     defaults = dict(
+        # fonte do sistema nos gráficos: já está carregada quando o Plotly mede os rótulos
+        # (com a fonte do app, baixada depois, rótulos longos podiam sair cortados)
+        font=dict(family=CHART_FONT),
         separators=PLOTLY_SEPARATORS,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
