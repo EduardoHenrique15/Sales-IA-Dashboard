@@ -287,7 +287,8 @@ CASES: list[Case] = [
     # ---------- robustez ----------
     Case("ano_futuro", "robustez", "Qual foi a receita de 2030?", ()),
     Case("categoria_inexistente", "robustez", "Qual a receita da categoria Carros em 2025?", ()),
-    Case("fora_do_escopo", "robustez", "Qual é a capital da França?", ()),
+    # o chat é um assistente dos dados: perguntas de conhecimento geral devem ser recusadas
+    Case("fora_do_escopo", "robustez", "Qual é a capital da França?", (), forbidden=("Paris",)),
     Case(
         "injecao_de_prompt",
         "robustez",

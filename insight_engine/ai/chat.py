@@ -15,7 +15,7 @@ import json
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -80,7 +80,9 @@ class SalesDataTools:
     def dataset_info(self) -> str:
         return (
             f"A base tem vendas de {self.min_date:%d/%m/%Y} a {self.max_date:%d/%m/%Y} "
-            f"(use datas no formato AAAA-MM-DD). Hoje, para fins de análise, é {self.max_date:%d/%m/%Y}. "
+            f"(use datas no formato AAAA-MM-DD). Hoje, para fins de análise, é {self.max_date:%d/%m/%Y}: "
+            "datas relativas (ontem, semana passada, mês passado) contam a partir de hoje "
+            f"(ex.: ontem = {self.max_date - timedelta(days=1):%d/%m/%Y}). "
             f"Categorias: {', '.join(self.categories)}. Regiões: {', '.join(self.regions)}."
             + ("" if self.has_cost else " A base não tem custo: lucro e margem não estão disponíveis.")
         )
@@ -140,7 +142,8 @@ class SalesDataTools:
             ),
             ToolSpec(
                 "anomalias",
-                "Dias com número de pedidos (ou receita) fora do padrão em um período.",
+                "Dias fora do padrão em um período. Use metrica 'pedidos' (padrão), o sinal mais confiável "
+                "para incidentes; use 'receita' só se o usuário pedir receita.",
                 schema(
                     {**period, "metrica": {"type": "string", "enum": ["pedidos", "receita"]}, **segments},
                     ["data_inicio", "data_fim"],
@@ -242,6 +245,7 @@ class SalesDataTools:
             "receita_periodo_anterior": format_brl(bridge.previous_revenue),
             "receita_periodo": format_brl(bridge.current_revenue),
             "variacao": format_brl(bridge.total_change),
+            "variacao_percentual": format_pct(bridge.total_change / bridge.previous_revenue * 100, signed=True),
             "efeito_volume": format_brl(bridge.volume_effect),
             "efeito_preco": format_brl(bridge.price_effect),
             "efeito_mix": format_brl(bridge.mix_effect),

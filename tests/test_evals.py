@@ -189,7 +189,8 @@ def test_execucao_salva_retoma_e_resume(tmp_path, sales_df, monkeypatch):
     summary = (tmp_path / "RESULTADOS.md").read_text(encoding="utf-8")
     assert "| `m1` | **50% (1/2)**" in summary
     assert "Qual foi a receita de ontem?" in summary  # lista as respostas reprovadas
-    assert "0 de 3" in summary  # relatórios: a falha do provedor vira motor local, não conta como válido
+    # relatórios: falha da API (aqui, "sem cota") fica fora da taxa e aparece na coluna de erros
+    assert "| `m1` | 0 de 0 |" in summary and summary.rstrip().count("| 3 |") >= 1
 
     # rodar de novo retoma: nenhuma pergunta é refeita
     run.main(["--modelos", "m1", "--casos", "receita_2024,ontem", "--sem-relatorio"], provider_factory=factory)
@@ -208,6 +209,19 @@ def test_erro_da_api_nao_conta_como_resposta_errada(tmp_path, sales_df):
     assert result.error == "serviço instável" and not result.passed
     text = run.write_summary({"m": [result]}, {}, tmp_path / "r.md")
     assert "Perguntas com erro da API" in text and "| `m` | **—**" in text
+
+
+def test_relatorio_fora_do_formato_conta_como_falha_do_modelo(tmp_path):
+    reports = {
+        "m": [
+            run.ReportResult("p1", valid=True, checked=10, verified=9),
+            run.ReportResult("p2", valid=False, error="o Gemini devolveu um relatório fora do formato esperado."),
+            run.ReportResult("p3", valid=False, error="a cota da API do Gemini foi esgotada"),
+        ]
+    }
+    text = run.write_summary({"m": []}, reports, tmp_path / "r.md")
+    assert "| `m` | 1 de 2 | 9 de 10 (90,0%)" in text and text.rstrip().endswith("Nenhuma.")
+    assert "| 1 |" in text  # o erro de cota fica na coluna de erros da API
 
 
 def test_sem_chave_avisa_e_sai(monkeypatch, capsys):

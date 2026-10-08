@@ -12,6 +12,7 @@ def tools(sales_df):
 
 def test_descreve_a_base_e_as_ferramentas(tools):
     assert "01/01/2023 a 31/12/2025" in tools.dataset_info()
+    assert "ontem = 30/12/2025" in tools.dataset_info()  # datas relativas a partir do fim da base
     assert [s.name for s in tools.specs()] == [
         "kpis",
         "ranking",
@@ -43,6 +44,7 @@ def test_variacao_e_anomalias_do_terceiro_trimestre_de_2024(tools):
     period = {"data_inicio": "2024-07-01", "data_fim": "2024-09-30"}
     bridge = tools.run("comparar_com_periodo_anterior", period)
     assert bridge["efeito_mix"] == "-R$ 52.025,13"
+    assert bridge["variacao_percentual"].endswith("%")  # o modelo não precisa calcular a variação
     anomalies = tools.run("anomalias", period)
     assert [d["data"] for d in anomalies["dias_anomalos"]] == ["07/08/2024"]
 

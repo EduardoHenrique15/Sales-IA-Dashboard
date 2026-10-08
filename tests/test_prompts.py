@@ -12,3 +12,4 @@ def test_prompt_leva_os_fatos_e_as_regras():
 def test_instrucoes_proibem_numeros_inventados():
     assert "SOMENTE números que aparecem no bloco de DADOS" in REPORT_SYSTEM
     assert "nunca estime nem invente valores" in CHAT_SYSTEM
+    assert "só responde sobre os dados" in CHAT_SYSTEM  # recusa perguntas fora do assunto

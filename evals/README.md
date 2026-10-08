@@ -33,8 +33,8 @@ Também são registrados a latência e os tokens gastos por pergunta (custo).
 Precisa de `GEMINI_API_KEY` no `.env`. Cada modelo é avaliado sozinho, sem o modelo reserva do app.
 
 ```bash
-python -m evals.run                                   # compara gemini-2.5-flash e gemini-flash-lite-latest
-python -m evals.run --modelos gemini-2.5-flash         # um modelo
+python -m evals.run                                   # compara gemini-flash-latest e gemini-flash-lite-latest
+python -m evals.run --modelos gemini-flash-lite-latest # um modelo
 python -m evals.run --casos ontem,campeoes --refazer   # refaz perguntas específicas
 ```
 

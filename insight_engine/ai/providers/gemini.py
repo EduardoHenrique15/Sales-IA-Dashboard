@@ -146,7 +146,7 @@ class GeminiProvider:
 
     # ------------------------------------------------------------------
     def describe_error(self, exc: Exception) -> str:
-        return describe_error(exc)
+        return describe_error(exc, self._models)
 
     def _set_model(self, model: str) -> None:
         self.last_model = model
@@ -163,15 +163,15 @@ def configured_models() -> list[str]:
     return list(dict.fromkeys(m for m in models if m))  # sem repetidos, na ordem
 
 
-def describe_error(exc: Exception) -> str:
+def describe_error(exc: Exception, models: list[str] | None = None) -> str:
     """Traduz uma falha do Gemini em uma mensagem curta para a interface."""
     if isinstance(exc, ValidationError):
         return "o Gemini devolveu um relatório fora do formato esperado."
     code = getattr(exc, "code", None)
     if code == 404:
-        models = ", ".join(f"`{m}`" for m in configured_models())
+        names = ", ".join(f"`{m}`" for m in models or configured_models())
         return (
-            f"nenhum dos modelos configurados ({models}) está disponível para esta chave. "
+            f"nenhum dos modelos configurados ({names}) está disponível para esta chave. "
             "Ajuste as configurações `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`."
         )
     if code in (400, 401, 403):

@@ -42,7 +42,10 @@ from insight_engine.formatting import format_number, format_pct
 ROOT = Path(__file__).resolve().parent
 RESULTS_DIR = ROOT / "resultados"
 SUMMARY_FILE = ROOT / "RESULTADOS.md"
-DEFAULT_MODELS = ["gemini-2.5-flash", "gemini-flash-lite-latest"]
+# apelidos que o Google mantém apontando para a versão atual de cada linha
+DEFAULT_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"]
+# motivo de fallback que indica relatório fora do formato (o resto é erro da API)
+FORMAT_ERROR = "fora do formato"
 # períodos dos relatórios avaliados (início, fim, comparação)
 REPORT_PERIODS: list[tuple[str, str, Literal["anterior", "ano_anterior"]]] = [
     ("2025-10-01", "2025-12-31", "anterior"),
@@ -192,17 +195,19 @@ def write_summary(
             "",
             "## Relatório executivo",
             "",
-            "| Modelo | Relatórios no formato certo | Números conferidos | Latência média |",
-            "|---|---|---|---|",
+            "| Modelo | Relatórios no formato certo | Números conferidos | Latência média | Erros da API |",
+            "|---|---|---|---|---|",
         ]
-        for model, items in reports.items():
+        for model, all_items in reports.items():
+            # erro da API (cota, modelo indisponível) não mede o modelo: fica de fora das taxas
+            items = [r for r in all_items if r.valid or FORMAT_ERROR in (r.error or "")]
             checked = sum(r.checked for r in items)
             verified = sum(r.verified for r in items)
             valid = sum(r.valid for r in items)
             lines.append(
                 f"| `{model}` | {valid} de {len(items)} | "
                 f"{verified} de {checked} ({format_pct(verified / checked * 100 if checked else 0)}) "
-                f"| {_mean(r.latency_s for r in items)} s |"
+                f"| {_mean(r.latency_s for r in items)} s | {len(all_items) - len(items)} |"
             )
 
     failures = [(m, r) for m in models for r in chat[m] if not r.passed and r.error is None]
