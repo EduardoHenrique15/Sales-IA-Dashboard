@@ -1,0 +1,51 @@
+# Avaliação da IA
+
+Mede, com números, o quanto o chat e o relatório executivo acertam. Isso permite comparar modelos e versões do
+prompt sem depender de impressão.
+
+## O que é medido
+
+**Chat com os dados** — 25 perguntas em [`cases.py`](cases.py), de 8 tipos: valores, rankings, tempo ("receita
+de ontem"), variação, anomalias, previsão, clientes e **robustez** (ano fora da base, categoria que não existe,
+assunto fora do escopo e uma tentativa de fazer a IA revelar a chave e o prompt).
+
+As respostas certas são calculadas com pandas direto sobre a base de exemplo, sem passar pelas consultas que o
+chat usa. Assim a avaliação confere o resultado final, e não só se o chat repetiu a ferramenta. As exceções são
+a decomposição em volume/preço/mix, a previsão e os segmentos RFM, que dependem do próprio método do app.
+
+Uma resposta passa quando ([`scoring.py`](scoring.py)):
+
+| Critério | Como é conferido |
+|---|---|
+| Consulta certa | O chat chamou uma das consultas que respondem a pergunta |
+| Números corretos | Cada número esperado aparece no texto, aceitando arredondamento (`R$ 2,84 milhões` para 2.838.404,99) |
+| Termos esperados | Nomes, meses e datas aparecem, sem diferenciar maiúsculas nem acentos |
+| Sem alucinação | Todo número citado aparece nos resultados das consultas (o mesmo verificador que roda no app) |
+| Nada proibido | Nem a chave de API nem trechos do prompt de sistema aparecem |
+
+**Relatório executivo** — 3 relatórios (trimestre vs trimestre anterior, trimestre vs ano anterior, ano
+inteiro): quantos saem no formato certo e quantos dos números citados são conferidos nos dados.
+
+Também são registrados a latência e os tokens gastos por pergunta (custo).
+
+## Como rodar
+
+Precisa de `GEMINI_API_KEY` no `.env`. Cada modelo é avaliado sozinho, sem o modelo reserva do app.
+
+```bash
+python -m evals.run                                   # compara gemini-2.5-flash e gemini-flash-lite-latest
+python -m evals.run --modelos gemini-2.5-flash         # um modelo
+python -m evals.run --casos ontem,campeoes --refazer   # refaz perguntas específicas
+```
+
+Cada resposta é salva em `resultados/<modelo>.jsonl` assim que termina. Se a cota gratuita acabar no meio,
+rode de novo mais tarde: a avaliação continua de onde parou. O resumo vai para [`RESULTADOS.md`](RESULTADOS.md).
+
+Com a cota gratuita, use a pausa padrão entre chamadas (`--pausa 4`). Uma rodada completa com dois modelos faz
+cerca de 130 chamadas.
+
+## Limites
+
+- As perguntas são da base de exemplo. Com outra base, as perguntas e o gabarito precisam ser refeitos.
+- 25 perguntas medem tendências, não diferenças pequenas: 1 pergunta a mais certa vale 4 pontos percentuais.
+- Os modelos variam de uma execução para outra. Para comparar com mais segurança, rode mais de uma vez.

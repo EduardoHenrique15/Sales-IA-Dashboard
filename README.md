@@ -50,6 +50,11 @@ citado é conferido contra os dados**. Sem chave de IA, tudo continua funcionand
 cada um contra os dados, com tolerância a arredondamento. A tela mostra "15 de 15 números conferidos" — ou
 avisa exatamente quais números não aparecem nos dados.
 
+**IA avaliada com números.** Um conjunto de 25 perguntas com gabarito calculado direto dos dados mede a taxa
+de acerto do chat, as alucinações, a escolha da consulta certa, a latência e o custo em tokens de cada modelo,
+incluindo perguntas sem resposta e uma tentativa de extrair a chave de API.
+Veja o [método](evals/README.md) e os [resultados](evals/RESULTADOS.md).
+
 **Resiliência.** Se o modelo principal falhar, o app tenta de novo com espera crescente, depois usa um modelo
 reserva e, por último, o motor estatístico local, que gera o **mesmo objeto de relatório** (um único
 renderizador para as duas origens). O motivo da falha aparece na tela.
@@ -159,6 +164,7 @@ insight_engine/
 ├── ai/                    # contexto, prompts, relatório estruturado, verificador, chat, PDF, limites
 │   └── providers/         # interface LLMProvider + implementação do Gemini
 └── ui/                    # tema, gráficos, componentes, filtros e cache do Streamlit
+evals/                     # avaliação da IA: perguntas com gabarito, pontuação e comparação de modelos
 tests/                     # testes unitários e de interface (rede bloqueada)
 .streamlit/config.toml     # tema claro/escuro, fonte e cores
 ```
@@ -178,6 +184,7 @@ pytest                     # testes (com cobertura: pytest --cov)
 ruff check .               # lint
 ruff format .              # formatação
 mypy                       # tipos
+python -m evals.run        # avaliação da IA (precisa de GEMINI_API_KEY)
 ```
 
 As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requirements.txt` e

@@ -49,8 +49,14 @@ MAX_RETRIES = 2
 class GeminiProvider:
     name = "Gemini"
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, models: list[str] | None = None) -> None:
         self._client = genai.Client(api_key=api_key)
+        # Sem `models`, usa o principal e o reserva da configuração. A avaliação (evals/)
+        # passa um modelo só, para medir cada modelo sem o reserva interferir.
+        self._models = list(models) if models else None
+        # modelo que respondeu por último e tokens gastos (usados pela avaliação)
+        self.last_model: str | None = None
+        self.tokens = {"entrada": 0, "saida": 0}
 
     # ------------------------------------------------------------------
     # Relatório
@@ -67,7 +73,9 @@ class GeminiProvider:
         def call(model: str):
             return self._client.models.generate_content(model=model, contents=prompt, config=config)
 
-        response, model = _with_fallback(call)
+        response, model = _with_fallback(call, self._models)
+        self.last_model = model
+        self._count_tokens(getattr(response, "usage_metadata", None))
         logger.info("Relatório gerado pelo modelo %s", model)
         if isinstance(response.parsed, ExecutiveReport):
             return response.parsed
@@ -111,7 +119,9 @@ class GeminiProvider:
         for _ in range(max_tool_rounds + 1):
             model_parts: list[Any] = []
             calls: list[Any] = []
-            for chunk in _stream_with_fallback(self._client, contents, config):
+            usage = None
+            for chunk in _stream_with_fallback(self._client, contents, config, self._models, self._set_model):
+                usage = getattr(chunk, "usage_metadata", None) or usage  # o último pedaço traz o total
                 content = chunk.candidates[0].content if chunk.candidates else None
                 for part in content.parts if content and content.parts else []:
                     model_parts.append(part)  # mantém assinaturas de "pensamento" exigidas pelo modelo
@@ -120,6 +130,7 @@ class GeminiProvider:
                     elif part.text and not part.thought:
                         yield TextDelta(part.text)
 
+            self._count_tokens(usage)
             if not calls:
                 return
             contents.append(genai_types.Content(role="model", parts=model_parts))
@@ -136,6 +147,15 @@ class GeminiProvider:
     # ------------------------------------------------------------------
     def describe_error(self, exc: Exception) -> str:
         return describe_error(exc)
+
+    def _set_model(self, model: str) -> None:
+        self.last_model = model
+
+    def _count_tokens(self, usage: Any) -> None:
+        for key, attr in (("entrada", "prompt_token_count"), ("saida", "candidates_token_count")):
+            value = getattr(usage, attr, None)
+            if isinstance(value, int):
+                self.tokens[key] += value
 
 
 def configured_models() -> list[str]:
@@ -184,10 +204,10 @@ def _can_try_other_model(exc: Exception) -> bool:
     return _is_transient(exc) or getattr(exc, "code", None) == 404
 
 
-def _with_fallback(call: Callable[[str], Any]) -> tuple[Any, str]:
+def _with_fallback(call: Callable[[str], Any], models: list[str] | None = None) -> tuple[Any, str]:
     """Chama `call(modelo)` com novas tentativas e, se preciso, o modelo reserva."""
     last_exc: Exception = ProviderError("Nenhum modelo do Gemini configurado")
-    for model in configured_models():
+    for model in models or configured_models():
         for attempt in range(MAX_RETRIES + 1):
             try:
                 return call(model), model
@@ -203,13 +223,17 @@ def _with_fallback(call: Callable[[str], Any]) -> tuple[Any, str]:
     raise last_exc
 
 
-def _stream_with_fallback(client, contents, config) -> Iterator[Any]:
+def _stream_with_fallback(
+    client, contents, config, models: list[str] | None = None, on_model: Callable[[str], None] | None = None
+) -> Iterator[Any]:
     """Streaming com a mesma política de tentativas, enquanto nada foi enviado ao usuário."""
     last_exc: Exception = ProviderError("Nenhum modelo do Gemini configurado")
-    for model in configured_models():
+    for model in models or configured_models():
         for attempt in range(MAX_RETRIES + 1):
             started = False
             try:
+                if on_model:
+                    on_model(model)
                 for chunk in client.models.generate_content_stream(model=model, contents=contents, config=config):
                     started = True
                     yield chunk

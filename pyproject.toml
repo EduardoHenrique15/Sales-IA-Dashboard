@@ -63,7 +63,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.11"
-packages = ["insight_engine"]
+packages = ["insight_engine", "evals"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

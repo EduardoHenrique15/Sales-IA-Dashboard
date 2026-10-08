@@ -138,6 +138,31 @@ class TestChat:
         assert called_models(client.generate_content_stream) == ["gemini-flash-latest", "gemini-flash-lite-latest"]
 
 
+class TestModeloEscolhidoETokens:
+    """Usados pela avaliação (evals/): um modelo só, sem reserva, e contagem de tokens."""
+
+    def test_relatorio_com_um_modelo_so_nao_usa_o_reserva(self, client):
+        client.generate_content.side_effect = [api_error(404)]
+        provider = gemini.GeminiProvider("x", models=["so-este"])
+        with pytest.raises(errors.APIError):
+            provider.generate_report("p", "s")
+        assert called_models(client.generate_content) == ["so-este"]
+
+    def test_conta_tokens_e_registra_o_modelo(self, client):
+        usage = SimpleNamespace(prompt_token_count=120, candidates_token_count=30)
+        client.generate_content.side_effect = [SimpleNamespace(parsed=sample_report(), text=None, usage_metadata=usage)]
+        last = chunk(genai_types.Part(text="ok"))
+        last.usage_metadata = SimpleNamespace(prompt_token_count=50, candidates_token_count=5)
+        client.generate_content_stream.side_effect = [iter([chunk(genai_types.Part(text="o")), last])]
+
+        provider = gemini.GeminiProvider("x", models=["m1"])
+        provider.generate_report("p", "s")
+        list(provider.chat_stream("s", [ChatMessage("user", "?")], TestChat.TOOLS, mock.Mock()))
+
+        assert provider.tokens == {"entrada": 170, "saida": 35}
+        assert provider.last_model == "m1"
+
+
 def test_modelos_configurados_sem_repeticao(monkeypatch):
     monkeypatch.setenv("GEMINI_MODEL", "m1")
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "m1")
