@@ -75,14 +75,18 @@ def run_chat(
     pause_s: float = 0.0,
     redo: bool = False,
 ) -> list[CaseResult]:
-    """Roda as perguntas e grava cada resultado; perguntas já respondidas são puladas."""
+    """Roda as perguntas e grava cada resultado.
+
+    Perguntas já respondidas são puladas; as que deram erro da API (cota, instabilidade)
+    são tentadas de novo. Com `redo`, as perguntas pedidas são refeitas de qualquer jeito.
+    """
     cases = list(cases)
+    ids = {c.id for c in cases}
     saved = load_results(out_file)
-    if redo:  # descarta só as perguntas que serão refeitas
-        ids = {c.id for c in cases}
-        saved = [r for r in saved if r.id not in ids]
-        _write_lines(out_file, [r.to_dict() for r in saved])
-    done = {r.id: r for r in saved}
+    kept = [r for r in saved if r.id not in ids or (not redo and r.error is None)]
+    if len(kept) != len(saved):
+        _write_lines(out_file, [r.to_dict() for r in kept])
+    done = {r.id: r for r in kept}
     tools = SalesDataTools(df)
     results = []
     for case in cases:

@@ -210,6 +210,12 @@ def test_erro_da_api_nao_conta_como_resposta_errada(tmp_path, sales_df):
     text = run.write_summary({"m": [result]}, {}, tmp_path / "r.md")
     assert "Perguntas com erro da API" in text and "| `m` | **—**" in text
 
+    # rodar de novo tenta outra vez a pergunta que deu erro, sem duplicar o registro
+    ok = FakeProvider(script=[("text", "A receita foi de R$ 7.992.364,44.")])
+    [retry] = run.run_chat(ok, sales_df, [case], tmp_path / "m.jsonl")
+    assert retry.error is None
+    assert len(run.load_results(tmp_path / "m.jsonl")) == 1
+
 
 def test_relatorio_fora_do_formato_conta_como_falha_do_modelo(tmp_path):
     reports = {

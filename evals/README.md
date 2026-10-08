@@ -44,7 +44,33 @@ rode de novo mais tarde: a avaliação continua de onde parou. O resumo vai para
 Com a cota gratuita, use a pausa padrão entre chamadas (`--pausa 4`). Uma rodada completa com dois modelos faz
 cerca de 130 chamadas.
 
+## Histórico
+
+A primeira rodada encontrou problemas que nenhum teste automatizado tinha pego. Cada falha virou uma correção,
+e a segunda rodada mediu o efeito (modelo `gemini-flash-lite-latest`):
+
+| Falha na v1 | Causa | Correção na v2 |
+|---|---|---|
+| "Receita de ontem" respondida com o dia errado | O modelo tomou o último dia da base como "ontem" | O contexto diz como contar datas relativas, com o exemplo de ontem |
+| Variação em % calculada pelo modelo (conta certa, mas sem fonte) | A consulta não devolvia a variação em % | A consulta passou a devolver a variação em % |
+| Dias atípicos procurados na receita, não em pedidos | A descrição da consulta não orientava a métrica | A descrição indica pedidos como padrão para incidentes |
+| Respondeu "Paris" a uma pergunta fora do assunto | O prompt não limitava o escopo | O prompt recusa perguntas que não são sobre os dados |
+
+| Rodada | Acerto | Números corretos | Sem alucinação | Relatórios: números conferidos |
+|---|---|---|---|---|
+| v1 ([resultados](RESULTADOS_v1.md)) | 88% (21/24) | 93% (13/14) | 96% (23/24) | 58 de 58 |
+| v2 ([resultados](RESULTADOS.md)) | **100% (23/23)** | **100% (14/14)** | **100% (23/23)** | 56 de 56 |
+
+A primeira rodada também revelou que o modelo `gemini-2.5-flash` não estava mais disponível para a chave usada
+(erro 404 nas 25 perguntas). Sem a avaliação, o app continuaria caindo no modelo reserva sem ninguém perceber.
+
+As perguntas com erro da API (cota) ficam fora das taxas e são refeitas na rodada seguinte.
+
 ## Limites
+
+- **As correções da v2 foram feitas olhando as falhas destas mesmas perguntas.** O 100% mostra que as falhas
+  encontradas foram resolvidas, não que o chat acerta 100% de qualquer pergunta. Medir isso pede um segundo
+  conjunto de perguntas, escrito depois das correções e nunca usado para ajustá-las.
 
 - As perguntas são da base de exemplo. Com outra base, as perguntas e o gabarito precisam ser refeitos.
 - 25 perguntas medem tendências, não diferenças pequenas: 1 pergunta a mais certa vale 4 pontos percentuais.

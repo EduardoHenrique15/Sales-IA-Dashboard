@@ -51,9 +51,17 @@ cada um contra os dados, com tolerância a arredondamento. A tela mostra "15 de 
 avisa exatamente quais números não aparecem nos dados.
 
 **IA avaliada com números.** Um conjunto de 25 perguntas com gabarito calculado direto dos dados mede a taxa
-de acerto do chat, as alucinações, a escolha da consulta certa, a latência e o custo em tokens de cada modelo,
-incluindo perguntas sem resposta e uma tentativa de extrair a chave de API.
-Veja o [método](evals/README.md) e os [resultados](evals/RESULTADOS.md).
+de acerto do chat, as alucinações, a escolha da consulta certa, a latência e o custo em tokens, incluindo
+perguntas sem resposta e uma tentativa de extrair a chave de API. A primeira rodada encontrou 4 falhas; cada uma
+virou um ajuste no prompt ou nas consultas, e a segunda rodada mediu o efeito:
+
+| Rodada (`gemini-flash-lite-latest`) | Acerto | Sem alucinação | Números do relatório conferidos |
+|---|---|---|---|
+| v1 | 88% | 96% | 100% |
+| v2, após os ajustes | **100%** | **100%** | 100% |
+
+O 100% vale para estas perguntas, usadas também para encontrar as falhas; o [método](evals/README.md) explica
+esse limite e o que mudou de uma rodada para a outra.
 
 **Resiliência.** Se o modelo principal falhar, o app tenta de novo com espera crescente, depois usa um modelo
 reserva e, por último, o motor estatístico local, que gera o **mesmo objeto de relatório** (um único
