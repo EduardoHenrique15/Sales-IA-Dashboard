@@ -58,6 +58,17 @@ def test_variacao_e_anomalias_do_terceiro_trimestre_de_2024(tools):
         ("ranking", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "dimensao": "cor"}, "dimensao"),
         ("kpis", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "categorias": ["Carros"]}, "Carros"),
         ("previsao", {"horizonte_dias": 7}, "30, 60 ou 90"),
+        (
+            "ranking",
+            {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "dimensao": "categoria", "ordem": "piores"},
+            "ordem",
+        ),
+        (
+            "ranking",
+            {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "dimensao": "categoria", "limite": "dez"},
+            "limite",
+        ),
+        ("anomalias", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "metrica": "lucro"}, "metrica"),
         ("kpis", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "extra": 1}, "Parâmetros inválidos"),
         ("apagar_tudo", {}, "Ferramenta desconhecida"),
     ],
@@ -95,3 +106,15 @@ def test_pergunta_longa_e_cortada(tools):
     provider = FakeProvider(script=[("text", "ok")])
     list(ask(provider, tools, [], "x" * 2000, ChatTurn()))
     assert len(provider.last_history[-1].text) == 500
+
+
+def test_categoria_como_texto_vira_lista(tools):
+    as_text = tools.run("kpis", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "categorias": "Moda"})
+    as_list = tools.run("kpis", {"data_inicio": "2025-01-01", "data_fim": "2025-12-31", "categorias": ["Moda"]})
+    assert "erro" not in as_text and as_text == as_list
+
+
+def test_sem_crescimento_quando_o_periodo_anterior_sai_da_base(tools):
+    result = tools.run("kpis", {"data_inicio": "2023-01-01", "data_fim": "2023-03-31"})
+    assert "erro" not in result
+    assert result["crescimento_vs_periodo_anterior"] == "sem período anterior comparável"

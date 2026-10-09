@@ -53,3 +53,9 @@ def test_custo_parcial_tambem_fica_indisponivel(small_sales_df):
     df = small_sales_df.copy()
     df.loc[0, ["cost", "profit"]] = float("nan")
     assert compute_sales_kpis(df).total_profit is None
+
+
+def test_periodo_sem_vendas_apos_periodo_com_vendas_e_queda_de_100(small_sales_df):
+    kpis = compute_sales_kpis(small_sales_df.iloc[0:0], small_sales_df)
+    assert kpis.revenue_growth_pct == -100.0
+    assert kpis.total_revenue == 0

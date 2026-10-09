@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -75,3 +76,30 @@ def test_poucos_clientes():
     )
     with pytest.raises(ValueError, match="pelo menos"):
         segment_customers(df)
+
+
+def test_recencia_usa_a_data_de_referencia_e_ignora_a_hora():
+    df = pd.DataFrame(
+        {
+            "customer_id": ["a", "b"],
+            "date": pd.to_datetime(["2025-01-10 23:00", "2025-01-05 08:00"]),
+            "revenue": [10.0, 5.0],
+        }
+    )
+    # referência do subconjunto filtrado = dia seguinte ao fim da base inteira, não do subconjunto
+    rfm = rfm_table(df, reference_date=pd.Timestamp("2025-01-31"))
+    assert rfm["recency"].tolist() == [21, 26]
+
+
+def test_segmentacao_sem_kmeans():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "customer_id": rng.choice([f"c{i}" for i in range(60)], 400),
+            "date": pd.Timestamp("2025-01-01") + pd.to_timedelta(rng.integers(0, 200, 400), unit="D"),
+            "revenue": rng.gamma(2, 50, 400),
+        }
+    )
+    result = segment_customers(df, with_clusters=False)
+    assert result.best_k == 0
+    assert result.customers["segment"].notna().all()

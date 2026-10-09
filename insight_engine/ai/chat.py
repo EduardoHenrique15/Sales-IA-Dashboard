@@ -27,7 +27,7 @@ from insight_engine.analytics.anomalies import daily_series, detect_anomalies
 from insight_engine.analytics.customers import pareto_share, segment_customers
 from insight_engine.analytics.forecasting import InsufficientDataError, forecast_revenue
 from insight_engine.analytics.kpis import compute_sales_kpis
-from insight_engine.analytics.periods import previous_period_df
+from insight_engine.analytics.periods import comparison_window, previous_period_df, window_is_covered
 from insight_engine.analytics.variance import revenue_bridge
 from insight_engine.formatting import format_brl, format_number, format_pct
 
@@ -211,7 +211,12 @@ class SalesDataTools:
         column = {"categoria": "category", "regiao": "region", "produto": "product"}.get(dimensao)
         if column is None:
             raise ToolInputError("dimensao deve ser categoria, regiao ou produto.")
-        limit = max(1, min(int(limite), MAX_RANKING))
+        if ordem not in ("maiores", "menores"):
+            raise ToolInputError("ordem deve ser 'maiores' ou 'menores'.")
+        try:
+            limit = max(1, min(int(limite), MAX_RANKING))
+        except (TypeError, ValueError) as exc:
+            raise ToolInputError(f"limite deve ser um número inteiro de 1 a {MAX_RANKING}.") from exc
         start, end = self._period(data_inicio, data_fim)
         current = self._slice(self._segment(categorias, regioes), start, end)
         revenue = current.groupby(column)["revenue"].sum().sort_values(ascending=(ordem == "menores"))
@@ -253,8 +258,12 @@ class SalesDataTools:
         }
 
     def anomalies(self, data_inicio: str, data_fim: str, metrica="pedidos", categorias=None, regioes=None):
+        if metrica not in ("pedidos", "receita"):
+            raise ToolInputError("metrica deve ser 'pedidos' ou 'receita'.")
         start, end = self._period(data_inicio, data_fim)
-        series = daily_series(self._segment(categorias, regioes), "orders" if metrica == "pedidos" else "revenue")
+        series = daily_series(
+            self._segment(categorias, regioes), "orders" if metrica == "pedidos" else "revenue", end=self.max_date
+        )
         try:
             found = detect_anomalies(series)
         except ValueError as exc:
@@ -280,8 +289,9 @@ class SalesDataTools:
         if horizon not in (30, 60, 90):
             raise ToolInputError("horizonte_dias deve ser 30, 60 ou 90.")
         try:
-            result = forecast_revenue(daily_series(self._segment(categorias, regioes), "revenue"), horizon)
-        except InsufficientDataError as exc:
+            series = daily_series(self._segment(categorias, regioes), "revenue", end=self.max_date)
+            result = forecast_revenue(series, horizon)
+        except (InsufficientDataError, ValueError) as exc:
             raise ToolInputError(str(exc)) from exc
         return {
             "a_partir_de": f"{self.max_date:%d/%m/%Y}",
@@ -292,7 +302,8 @@ class SalesDataTools:
         }
 
     def customer_segments(self, regioes=None) -> dict[str, Any]:
-        seg = segment_customers(self._segment(None, regioes))
+        # só os segmentos RFM: o K-Means seria lento demais para uma resposta de chat
+        seg = segment_customers(self._segment(None, regioes), reference_date=self._reference(), with_clusters=False)
         return {
             "clientes": format_number(len(seg.customers)),
             "receita_dos_20pct_melhores_clientes": format_pct(pareto_share(seg.customers)),
@@ -326,6 +337,8 @@ class SalesDataTools:
     def _segment(self, categories, regions) -> pd.DataFrame:
         df = self.df
         for values, column, valid in ((categories, "category", self.categories), (regions, "region", self.regions)):
+            if isinstance(values, str):  # o modelo às vezes manda um texto em vez de uma lista
+                values = [values]
             if values:
                 unknown = sorted(set(values) - set(valid))
                 if unknown:
@@ -338,9 +351,14 @@ class SalesDataTools:
         dates = df["date"].dt.date
         return df[(dates >= start) & (dates <= end)]
 
-    @staticmethod
-    def _previous(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    def _previous(self, df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+        """Período anterior de mesma duração; vazio se ele começa antes da base (comparação parcial)."""
+        if not window_is_covered(*comparison_window(start, end), self.min_date):
+            return df.iloc[0:0]
         return previous_period_df(df, start, end)
+
+    def _reference(self) -> pd.Timestamp:
+        return pd.Timestamp(self.max_date) + pd.Timedelta(days=1)
 
 
 def ask(

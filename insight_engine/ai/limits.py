@@ -40,6 +40,12 @@ class SlidingWindowLimiter:
             self._calls.append(now)
             return True
 
+    def release(self) -> None:
+        """Devolve a última vaga reservada (quando a chamada acabou não acontecendo)."""
+        with self._lock:
+            if self._calls:
+                self._calls.pop()
+
 
 def session_limiter() -> SlidingWindowLimiter:
     limit = int(get_setting("SERVER_KEY_CALLS_PER_HOUR") or DEFAULT_PER_SESSION_PER_HOUR)

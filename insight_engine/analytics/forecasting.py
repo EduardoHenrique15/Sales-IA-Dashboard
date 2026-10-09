@@ -150,6 +150,14 @@ def _backtest(series: pd.Series, model, horizon: int, n_folds: int) -> np.ndarra
     return np.concatenate(errors)
 
 
+def _total_error(errors_per_fold: np.ndarray, actual_per_fold: np.ndarray) -> float:
+    """Erro médio (%) do total de cada janela; janelas sem receita ficam de fora (o % não existe)."""
+    valid = actual_per_fold > 0
+    if not valid.any():
+        return float("nan")
+    return float(np.mean(np.abs(errors_per_fold[valid]) / actual_per_fold[valid]) * 100)
+
+
 def _score(series: pd.Series, errors: dict[str, np.ndarray], horizon: int, n_folds: int) -> pd.DataFrame:
     actual = series.iloc[-n_folds * horizon :].to_numpy()
     actual_total = np.abs(actual).sum()
@@ -163,9 +171,7 @@ def _score(series: pd.Series, errors: dict[str, np.ndarray], horizon: int, n_fol
                 # viés: positivo = o modelo subestima a receita
                 "bias": err.sum() / actual_total * 100,
                 # erro ao prever o total de cada janela, em média
-                "total_error": float(
-                    np.mean(np.abs(err.reshape(n_folds, horizon).sum(axis=1)) / np.maximum(actual_per_fold, 1e-9)) * 100
-                ),
+                "total_error": _total_error(err.reshape(n_folds, horizon).sum(axis=1), actual_per_fold),
             }
             for name, err in errors.items()
         }

@@ -190,7 +190,7 @@ def test_execucao_salva_retoma_e_resume(tmp_path, sales_df, monkeypatch):
     assert "| `m1` | **50% (1/2)**" in summary
     assert "Qual foi a receita de ontem?" in summary  # lista as respostas reprovadas
     # relatórios: falha da API (aqui, "sem cota") fica fora da taxa e aparece na coluna de erros
-    assert "| `m1` | 0 de 0 |" in summary and summary.rstrip().count("| 3 |") >= 1
+    assert "| `m1` | — | — |" in summary and summary.rstrip().count("| 3 |") >= 1
 
     # rodar de novo retoma: nenhuma pergunta é refeita
     run.main(["--modelos", "m1", "--casos", "receita_2024,ontem", "--sem-relatorio"], provider_factory=factory)
@@ -200,6 +200,44 @@ def test_execucao_salva_retoma_e_resume(tmp_path, sales_df, monkeypatch):
     run.main(["--modelos", "m1", "--casos", "ontem", "--refazer", "--sem-relatorio"], provider_factory=factory)
     ids = [json.loads(line)["id"] for line in (tmp_path / "m1.jsonl").read_text(encoding="utf-8").splitlines()]
     assert sorted(ids) == ["ontem", "receita_2024"]
+
+    # outro modelo, com os casos separados por espaço (como chegam do PowerShell): o resumo
+    # mantém o modelo e os relatórios da rodada anterior
+    run.main(["--modelos", "m2", "--casos", "receita_2024", "ontem", "--sem-relatorio"], provider_factory=factory)
+    summary = (tmp_path / "RESULTADOS.md").read_text(encoding="utf-8")
+    assert "| `m2` | **50% (1/2)**" in summary and "| `m1` | **50% (1/2)**" in summary
+    assert "## Relatório executivo" in summary
+
+
+def test_resultado_guardado_e_conferido_com_o_gabarito_atual(sales_df):
+    case = next(c for c in CASES if c.id == "receita_2024")
+    stale = run.CaseResult(
+        case.id, case.kind, case.question, answer="A receita foi de R$ 7.000.000,00.", right_tool=True
+    )
+    stale_dict = stale.to_dict() | {"missing_numbers": [], "passed": True}  # aprovado com um gabarito antigo
+    [result] = run.rescored([run.CaseResult.from_dict(stale_dict)], sales_df)
+    assert result.missing_numbers and not result.passed
+    removed = run.CaseResult("pergunta_removida", "valores", "?")
+    assert run.rescored([removed], sales_df) == []
+
+
+def test_numeros_trocados_entre_categorias_reprovam(sales_df):
+    case = next(c for c in CASES if c.id == "moda_vs_beleza_2025")
+    moda, beleza = (n.value for n in case.expected(sales_df).numbers)
+    brl = run.format_number
+    right = ChatTurn(text=f"- Moda: R$ {brl(moda, 2)}\n- Beleza: R$ {brl(beleza, 2)}", tool_calls=[])
+    swapped = ChatTurn(text=f"- Moda: R$ {brl(beleza, 2)}\n- Beleza: R$ {brl(moda, 2)}", tool_calls=[])
+    assert not score(case, case.expected(sales_df), right).missing_numbers
+    assert len(score(case, case.expected(sales_df), swapped).missing_numbers) == 2
+
+
+def test_robustez_nao_aceita_numeros(sales_df):
+    case = next(c for c in CASES if c.id == "ano_futuro")
+    answer = "Não há dados de 2030; a base vai de 01/01/2023 a 31/12/2025."
+    assert score(case, case.expected(sales_df), ChatTurn(text=answer)).passed
+    # um número real da base, mas que não responde à pergunta, também reprova
+    result = score(case, case.expected(sales_df), ChatTurn(text="Em 2030 a receita será de R$ 7.992.364,44."))
+    assert result.unexpected_numbers == ["R$ 7.992.364,44"] and not result.passed
 
 
 def test_erro_da_api_nao_conta_como_resposta_errada(tmp_path, sales_df):

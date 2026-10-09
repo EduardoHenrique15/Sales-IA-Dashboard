@@ -7,7 +7,7 @@ import streamlit as st
 
 from insight_engine.ai.context import build_sales_facts
 from insight_engine.analytics.kpis import SalesKPIs, compute_sales_kpis
-from insight_engine.analytics.periods import apply_segments, filter_sales
+from insight_engine.analytics.periods import apply_segments, comparison_is_complete, comparison_window, filter_sales
 from insight_engine.analytics.variance import revenue_bridge
 from insight_engine.formatting import format_brl, format_number, format_pct
 from insight_engine.ui import charts, datasets, filters
@@ -39,13 +39,17 @@ df_filtered, df_prev = filter_sales(df_all, selection)
 kpis = compute_sales_kpis(df_filtered, previous_df=df_prev)
 previous_kpis = compute_sales_kpis(df_prev) if not df_prev.empty else None
 comparison = selection.comparison_label
+comparison_complete = comparison_is_complete(df_all, selection)
 versus = "vs ano anterior" if selection.comparison == "ano_anterior" else "vs anterior"
 
 # ---------- CABEÇALHO ----------
+comparison_note = (
+    f"comparação com o {comparison}" if comparison_complete else "sem comparação (o período anterior sai da base)"
+)
 page_header(
     "Visão geral de vendas",
     f":material/calendar_month: **{selection.period_label}** · {format_number(kpis.n_orders)} pedidos · "
-    f"comparação com o {comparison} · Base: {dataset.name}",
+    f"{comparison_note} · Base: {dataset.name}",
     icon=":material/dashboard:",
 )
 
@@ -214,7 +218,15 @@ else:
         chart_card("Produtos com maior receita", charts.top_products(df_filtered))
 
     with tab_change:
-        if previous_kpis is None:
+        if not comparison_complete:
+            prev_start, _ = comparison_window(selection.start, selection.end, selection.comparison)
+            st.info(
+                f"O {comparison} começaria em {prev_start:%d/%m/%Y}, antes do início da base "
+                f"({df_all['date'].min():%d/%m/%Y}). A comparação não é feita para não comparar períodos de "
+                "tamanhos diferentes: escolha um período mais curto ou outra base de comparação.",
+                icon=":material/info:",
+            )
+        elif previous_kpis is None:
             st.info(f"Não há vendas no {comparison} para comparar.", icon=":material/info:")
         else:
             bridge = revenue_bridge(df_filtered, df_prev)
@@ -294,11 +306,21 @@ report_section(
             period_label=selection.period_label,
             has_customers=dataset.has_customers,
             comparison_label=comparison,
+            data_end=df_all["date"].max(),
         )
         if not df_filtered.empty
         else None
     ),
     period_label=selection.period_label,
     dataset_name="Vendas",
-    context=f"{dataset.name}_{selection.comparison}",
+    # o relatório fica ligado ao recorte em que foi gerado: mudar período, filtros ou base pede um novo
+    context="_".join(
+        [
+            datasets.dataset_key(dataset),
+            selection.period_label,
+            selection.comparison,
+            ",".join(selection.categories),
+            ",".join(selection.regions),
+        ]
+    ),
 )

@@ -137,7 +137,9 @@ plotly==7.1.0
 protobuf==7.36.2
     # via streamlit
 pyarrow==25.0.1
-    # via streamlit
+    # via
+    #   insight-engine (pyproject.toml)
+    #   streamlit
 pyasn1==0.6.4
     # via pyasn1-modules
 pyasn1-modules==0.4.2

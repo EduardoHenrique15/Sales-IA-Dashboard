@@ -162,23 +162,40 @@ def parse_numbers(values: pd.Series) -> pd.Series:
     """Converte textos como "R$ 1.234,56", "1,234.56" ou "12,5" em números."""
     if pd.api.types.is_numeric_dtype(values):
         return pd.to_numeric(values, errors="coerce").astype(float)
-    text = values.astype("string")
-    # Se a coluna usa vírgula decimal ("12,50"), um ponto isolado ("1.234") é milhar.
-    brazilian = bool(text.str.contains(r",\d+\s*$", regex=True).any()) and not bool(
-        text.str.contains(r",\d{3}\.", regex=True).any()
+    text = values.astype("string").str.strip()
+    # Um ponto isolado ("1.234") é milhar quando a coluna usa vírgula decimal ("12,50"),
+    # tem "R$" ou quando todo ponto separa grupos de 3 dígitos ("R$ 1.500", "2.300").
+    comma_decimal = bool(text.str.contains(r",\d+\)?\s*$", regex=True).any())
+    english = bool(text.str.contains(r",\d{3}\.", regex=True).any())
+    dotted = text[text.str.contains(".", regex=False).fillna(False)]
+    dots_are_thousands = not dotted.empty and bool(
+        dotted.str.fullmatch(r"[^\d.,]*-?\d{1,3}(?:\.\d{3})+[^\d.,]*", na=False).all()
     )
+    has_brl = bool(text.str.contains("R$", regex=False).any())
+    brazilian = not english and (comma_decimal or has_brl or dots_are_thousands)
     return values.map(lambda v: _parse_number(v, brazilian)).astype(float)
 
 
 def parse_dates(values: pd.Series) -> pd.Series:
-    """Converte datas no formato brasileiro (31/12/2025), ISO ou de planilhas."""
+    """Converte datas no formato brasileiro (31/12/2025), ano primeiro (2025-12-31, 2025/12/31) ou de planilhas."""
     if pd.api.types.is_datetime64_any_dtype(values):
         return pd.to_datetime(values).dt.tz_localize(None).dt.normalize()
     text = values.astype("string").str.strip()
-    iso = text.str.match(r"^\d{4}-\d{2}-\d{2}")
     parsed = pd.Series(pd.NaT, index=values.index, dtype="datetime64[ns]")
-    parsed[iso] = pd.to_datetime(text[iso].str[:10], format="%Y-%m-%d", errors="coerce")
-    parsed[~iso] = pd.to_datetime(text[~iso], dayfirst=True, errors="coerce", format="mixed")
+
+    # ano primeiro: com dayfirst, "2025/03/01" viraria 3 de janeiro
+    parts = text.str.extract(r"^(?P<year>\d{4})[-/.](?P<month>\d{1,2})[-/.](?P<day>\d{1,2})(?:\D|$)")
+    year_first = parts["year"].notna()
+    if year_first.any():
+        parsed[year_first] = pd.to_datetime(parts[year_first].astype(int), errors="coerce")
+
+    # número serial do Excel (dias desde 30/12/1899), ex.: 45658 = 01/01/2025
+    serial = pd.to_numeric(text.where(text.str.fullmatch(r"\d{5}(?:\.\d+)?", na=False)), errors="coerce")
+    is_serial = serial.between(20_000, 80_000).fillna(False).astype(bool)  # de 1954 a 2119
+    parsed[is_serial] = pd.Timestamp("1899-12-30") + pd.to_timedelta(serial[is_serial].astype(float), unit="D")
+
+    rest = ~year_first & ~is_serial
+    parsed[rest] = pd.to_datetime(text[rest], dayfirst=True, errors="coerce", format="mixed")
     return parsed.dt.normalize()
 
 
@@ -216,9 +233,12 @@ def _parse_number(value: object, brazilian: bool = False) -> float:
         return np.nan
     if isinstance(value, int | float):
         return float(value)
-    text = re.sub(r"[^\d,.\-]", "", str(value))  # remove "R$", espaços etc.
+    raw = str(value).strip()
+    text = re.sub(r"[^\d,.\-]", "", raw)  # remove "R$", espaços etc.
     if not text:
         return np.nan
+    if raw.startswith("(") and raw.endswith(")") and not text.startswith("-"):
+        text = "-" + text  # negativo no formato contábil: "(1.234,56)"
     if "," in text and "." in text:
         # o último separador é o decimal: "1.234,56" (BR) ou "1,234.56" (EN)
         thousands = "." if text.rfind(",") > text.rfind(".") else ","

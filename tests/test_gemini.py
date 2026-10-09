@@ -173,7 +173,9 @@ def test_modelos_configurados_sem_repeticao(monkeypatch):
     ("exc", "expected"),
     [
         (api_error(404), "nenhum dos modelos configurados"),
-        (api_error(400), "chave do Gemini é inválida"),
+        (api_error(403), "chave do Gemini é inválida"),
+        (errors.APIError(400, {"error": {"message": "API key not valid. Please pass a valid API key."}}), "inválida"),
+        (api_error(400), "recusou a requisição"),
         (api_error(429), "cota da API do Gemini foi esgotada"),
         (api_error(503), "instável ou sobrecarregado"),
         (RuntimeError("?"), "erro inesperado"),

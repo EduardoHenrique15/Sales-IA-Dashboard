@@ -14,7 +14,7 @@ from insight_engine.ai.agent import SOURCE_LLM, ReportResult, generate_executive
 from insight_engine.ai.context import SalesFacts
 from insight_engine.ai.report import ExecutiveReport
 from insight_engine.ai.report_pdf import render_pdf
-from insight_engine.ui import branding
+from insight_engine.ui import branding, datasets
 from insight_engine.ui.ai_access import GEMINI_KEY_STATE, ai_access, report_cache
 from insight_engine.ui.theme import PLOTLY_CONFIG
 
@@ -73,7 +73,7 @@ def report_section(
     segmentação, que levam alguns segundos). O último relatório fica guardado
     por página e por base de dados (`context`).
     """
-    state_key = f"report_{dataset_name}_{context}"
+    state_key = f"{datasets.report_state_prefix(dataset_name)}{context}"
 
     st.space("medium")
     with st.container(horizontal=True, vertical_alignment="center"):

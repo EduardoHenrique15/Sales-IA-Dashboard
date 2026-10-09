@@ -48,7 +48,9 @@ def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None
     usado para calcular a variação percentual da receita.
     """
     if df.empty:
-        return SalesKPIs()
+        # sem vendas no período: se o anterior teve vendas, a queda foi de 100%
+        lost_everything = previous_df is not None and previous_df["revenue"].sum() > 0
+        return SalesKPIs(revenue_growth_pct=-100.0 if lost_everything else None)
 
     total_revenue = float(df["revenue"].sum())
     n_orders = count_orders(df)

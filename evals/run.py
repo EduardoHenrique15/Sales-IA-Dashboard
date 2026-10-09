@@ -6,7 +6,7 @@ Uso (precisa de GEMINI_API_KEY no .env ou no ambiente):
 
     python -m evals.run
     python -m evals.run --modelos gemini-2.5-flash gemini-flash-lite-latest
-    python -m evals.run --casos receita_2024,ontem --refazer
+    python -m evals.run --casos receita_2024 ontem --refazer
 
 Cada resposta é salva assim que termina em `evals/resultados/<modelo>.jsonl`:
 se a cota acabar no meio, rodar de novo continua de onde parou (use
@@ -30,7 +30,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from evals.cases import CASES, Case
-from evals.scoring import CaseResult, score
+from evals.scoring import CaseResult, rescore, score
 from insight_engine.ai.agent import SOURCE_LLM, generate_executive_summary
 from insight_engine.ai.chat import ChatTurn, SalesDataTools, ask
 from insight_engine.ai.context import build_sales_facts
@@ -208,9 +208,9 @@ def write_summary(
             checked = sum(r.checked for r in items)
             verified = sum(r.verified for r in items)
             valid = sum(r.valid for r in items)
+            numbers = f"{verified} de {checked} ({format_pct(verified / checked * 100)})" if checked else "—"
             lines.append(
-                f"| `{model}` | {valid} de {len(items)} | "
-                f"{verified} de {checked} ({format_pct(verified / checked * 100 if checked else 0)}) "
+                f"| `{model}` | {f'{valid} de {len(items)}' if items else '—'} | {numbers} "
                 f"| {_mean(r.latency_s for r in items)} s | {len(all_items) - len(items)} |"
             )
 
@@ -223,6 +223,7 @@ def write_summary(
             [f"faltou {x}" for x in r.missing_numbers + r.missing_texts]
             + [f"número sem fonte: {x}" for x in r.hallucinated]
             + [f"texto proibido: {x}" for x in r.forbidden_found]
+            + [f"número numa pergunta sem resposta nos dados: {x}" for x in r.unexpected_numbers]
             + ([] if r.right_tool else [f"consulta errada ({', '.join(r.tools_called) or 'nenhuma'})"])
         )
         lines.append(f"- `{model}` · **{r.question}** — {'; '.join(problems)}")
@@ -256,10 +257,32 @@ def results_file(model: str) -> Path:
     return RESULTS_DIR / f"{model}.jsonl"
 
 
+def report_file(model: str) -> Path:
+    return RESULTS_DIR / f"{model}_relatorio.jsonl"
+
+
 def load_results(path: Path) -> list[CaseResult]:
     if not path.exists():
         return []
     return [CaseResult.from_dict(json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def load_reports(path: Path) -> list[ReportResult]:
+    if not path.exists():
+        return []
+    return [ReportResult(**json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def rescored(results: list[CaseResult], df: pd.DataFrame) -> list[CaseResult]:
+    """Resultados guardados conferidos contra as respostas certas atuais (perguntas removidas saem)."""
+    cases = {c.id: c for c in CASES}
+    return [rescore(r, cases[r.id], cases[r.id].expected(df)) for r in results if r.id in cases]
+
+
+def stored_models(first: Iterable[str] = ()) -> list[str]:
+    """Modelos com respostas guardadas: os pedidos agora primeiro, depois os de rodadas anteriores."""
+    saved = sorted(p.stem for p in RESULTS_DIR.glob("*.jsonl") if not p.stem.endswith("_relatorio"))
+    return list(dict.fromkeys([*first, *saved]))
 
 
 def _append(path: Path, item: dict) -> None:
@@ -277,7 +300,7 @@ def _write_lines(path: Path, items: list[dict]) -> None:
 def main(argv: list[str] | None = None, provider_factory: Callable[[str], Any] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Avaliação do chat e do relatório com IA.")
     parser.add_argument("--modelos", nargs="+", default=DEFAULT_MODELS, help="modelos do Gemini a comparar")
-    parser.add_argument("--casos", help="ids das perguntas, separados por vírgula (padrão: todas)")
+    parser.add_argument("--casos", nargs="+", help="ids das perguntas, separados por espaço ou vírgula (padrão: todas)")
     parser.add_argument("--pausa", type=float, default=4.0, help="segundos entre chamadas (limite da cota gratuita)")
     parser.add_argument("--sem-relatorio", action="store_true", help="avalia só o chat")
     parser.add_argument("--refazer", action="store_true", help="ignora resultados salvos e refaz tudo")
@@ -289,20 +312,24 @@ def main(argv: list[str] | None = None, provider_factory: Callable[[str], Any] |
             print("Defina GEMINI_API_KEY no .env ou no ambiente para rodar a avaliação.", file=sys.stderr)
             return 1
 
-    wanted = set(args.casos.split(",")) if args.casos else None
+    # aceita "a b" e "a,b" (no PowerShell, "a,b" chega como dois argumentos)
+    wanted = {i for item in args.casos for i in item.split(",") if i} if args.casos else None
     cases = [c for c in CASES if wanted is None or c.id in wanted]
     df = load_sales_data()
 
-    chat, reports = {}, {}
     for model in args.modelos:
         print(f"\n== {model}: chat ({len(cases)} perguntas)")
         provider = provider_factory(model)
         run_chat(provider, df, cases, results_file(model), args.pausa, args.refazer)
-        chat[model] = load_results(results_file(model))  # resumo com todas as perguntas já avaliadas
         if not args.sem_relatorio:
             print(f"== {model}: relatório executivo")
-            reports[model] = run_reports(provider, df, RESULTS_DIR / f"{model}_relatorio.jsonl", args.pausa)
+            run_reports(provider, df, report_file(model), args.pausa)
 
+    # o resumo reúne tudo o que já foi avaliado, inclusive modelos e relatórios de rodadas anteriores;
+    # modelos que só tiveram erros da API (ex.: indisponíveis para a chave) ficam de fora
+    chat = {model: rescored(load_results(results_file(model)), df) for model in stored_models(args.modelos)}
+    chat = {model: items for model, items in chat.items() if any(r.error is None for r in items)}
+    reports = {model: load_reports(report_file(model)) for model in chat if report_file(model).exists()}
     write_summary(chat, reports)
     print(f"\nResumo salvo em {SUMMARY_FILE}")
     return 0

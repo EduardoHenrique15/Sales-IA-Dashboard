@@ -134,33 +134,37 @@ def build_sales_facts(
     period_label: str,
     has_customers: bool = True,
     comparison_label: str = "período anterior de mesma duração",
+    data_end=None,
 ) -> SalesFacts:
     """Reúne os fatos do período selecionado.
 
     `history` é a base inteira já com os filtros de categoria/região (sem filtro de
     data): é dela que saem anomalias, previsão e segmentação de clientes.
+    `data_end` é a última data da base inteira (um segmento pode ter parado antes).
     """
     daily = period.groupby(period["date"].dt.date)["revenue"].sum()
 
     anomalies = pd.DataFrame()
     try:
-        found = detect_anomalies(daily_series(history, "orders"))
+        found = detect_anomalies(daily_series(history, "orders", end=data_end))
         if not period.empty:
-            in_period = (found.index >= period["date"].min()) & (found.index <= period["date"].max())
+            days = period["date"].dt.normalize()  # o índice das anomalias é meia-noite de cada dia
+            in_period = (found.index >= days.min()) & (found.index <= days.max())
             anomalies = found[in_period]
     except ValueError:
         logger.info("Histórico curto demais para detectar anomalias")
 
     forecast = None
     try:
-        forecast = forecast_revenue(daily_series(history, "revenue"), FORECAST_HORIZON)
-    except InsufficientDataError:
+        forecast = forecast_revenue(daily_series(history, "revenue", end=data_end), FORECAST_HORIZON)
+    except (InsufficientDataError, ValueError):
         logger.info("Histórico curto demais para a previsão")
 
     segmentation = None
     if has_customers:
         try:
-            segmentation = segment_customers(history)
+            # o relatório só usa os segmentos RFM: o K-Means (lento em bases grandes) fica de fora
+            segmentation = segment_customers(history, with_clusters=False)
         except ValueError:
             logger.info("Clientes insuficientes para a segmentação")
 

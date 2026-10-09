@@ -174,8 +174,11 @@ def describe_error(exc: Exception, models: list[str] | None = None) -> str:
             f"nenhum dos modelos configurados ({names}) está disponível para esta chave. "
             "Ajuste as configurações `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`."
         )
-    if code in (400, 401, 403):
+    # o Gemini responde 400 tanto para chave inválida ("API key not valid") quanto para pedidos recusados
+    if code in (401, 403) or (code == 400 and "api key" in str(exc).lower()):
         return "a chave do Gemini é inválida ou não tem permissão de acesso."
+    if code == 400:
+        return "o Gemini recusou a requisição (erro 400; detalhes no log do servidor)."
     if code == 429:
         return "a cota da API do Gemini foi esgotada (inclusive no modelo reserva). Tente novamente em alguns minutos."
     if code is not None and code >= 500:

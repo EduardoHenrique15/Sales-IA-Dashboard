@@ -44,7 +44,23 @@ def is_example(dataset: SalesDataset) -> bool:
     return dataset.name == EXAMPLE_NAME
 
 
+def chat_state_key(dataset: SalesDataset) -> str:
+    return f"chat_{dataset.name}"
+
+
+def report_state_prefix(dataset_name: str) -> str:
+    return f"report_{dataset_name}_"
+
+
 def set_uploaded(dataset: SalesDataset) -> None:
+    # um arquivo novo com o mesmo nome não pode herdar a conversa nem o relatório do anterior
+    stale = [
+        key
+        for key in st.session_state
+        if key == chat_state_key(dataset) or str(key).startswith(report_state_prefix(dataset.name))
+    ]
+    for key in stale:
+        del st.session_state[key]
     st.session_state[UPLOAD_STATE] = dataset
     st.session_state[CHOICE_STATE] = UPLOADED
 

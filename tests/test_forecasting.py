@@ -60,3 +60,10 @@ def test_numero_de_janelas_se_adapta_ao_historico():
 def test_historico_insuficiente():
     with pytest.raises(InsufficientDataError, match="pelo menos"):
         forecast_revenue(synthetic_series(days=MIN_TRAIN_DAYS + 10), horizon=30)
+
+
+def test_erro_do_total_ignora_janelas_sem_venda():
+    from insight_engine.analytics.forecasting import _total_error
+
+    assert _total_error(np.array([5.0, 3.0]), np.array([0.0, 30.0])) == pytest.approx(10.0)
+    assert np.isnan(_total_error(np.array([5.0]), np.array([0.0])))

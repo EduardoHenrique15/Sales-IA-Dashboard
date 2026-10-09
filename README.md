@@ -82,8 +82,9 @@ avisa exatamente quais números não aparecem nos dados.
 
 **IA avaliada com números.** Um conjunto de 25 perguntas com gabarito calculado direto dos dados mede a taxa
 de acerto do chat, as alucinações, a escolha da consulta certa, a latência e o custo em tokens, incluindo
-perguntas sem resposta e uma tentativa de extrair a chave de API. A primeira rodada encontrou 4 falhas; cada uma
-virou um ajuste no prompt ou nas consultas, e a segunda rodada mediu o efeito:
+perguntas sem resposta e uma tentativa de extrair a chave de API. A primeira rodada encontrou 4 problemas (3 respostas
+reprovadas pela pontuação e 1 visto na leitura das respostas); cada um virou um ajuste no prompt ou nas
+consultas, e a segunda rodada mediu o efeito:
 
 | Rodada (`gemini-flash-lite-latest`) | Acerto | Sem alucinação | Números do relatório conferidos |
 |---|---|---|---|
@@ -169,8 +170,12 @@ Copie `.env.example` para `.env` e preencha a chave (gratuita em
 
 ```
 GEMINI_API_KEY=sua_chave
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-flash-lite-latest
+GEMINI_FALLBACK_MODEL=gemini-flash-latest
 ```
+
+Os modelos são opcionais. Com a cota gratuita, o `gemini-flash-lite-latest` como principal costuma esgotar
+menos a cota (e foi o mais bem avaliado em [`evals/`](evals/RESULTADOS.md)).
 
 Também dá para colar uma chave no painel **Inteligência artificial**, na barra lateral, sem salvar nada.
 

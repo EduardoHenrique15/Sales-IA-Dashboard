@@ -21,6 +21,7 @@ dependencies = [
     "openpyxl>=3.1",  # leitura de planilhas .xlsx enviadas
     "pydantic>=2.6",  # saída estruturada do relatório de IA
     "fpdf2>=2.7",  # exportação do relatório em PDF
+    "pyarrow>=15",  # leitura da base da Olist (parquet)
 ]
 
 [project.optional-dependencies]

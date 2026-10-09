@@ -57,14 +57,21 @@ class Decomposition:
         return profile.rename(index=dict(enumerate(WEEKDAYS)))
 
 
-def daily_series(df: pd.DataFrame, metric: str = "revenue") -> pd.Series:
-    """Série diária de `metric` ("revenue" ou "orders"), com zero nos dias sem venda."""
+def daily_series(df: pd.DataFrame, metric: str = "revenue", end=None) -> pd.Series:
+    """Série diária de `metric` ("revenue" ou "orders"), com zero nos dias sem venda.
+
+    `end` estende a série até o fim da base: um segmento que parou de vender antes
+    disso tem dias zerados no final (que a previsão e as anomalias precisam ver).
+    """
+    if df.empty:
+        raise ValueError("Não há vendas para montar a série diária.")
     grouped = df.groupby(df["date"].dt.normalize())
     if metric == "revenue":
         daily = grouped["revenue"].sum()
     else:  # pedidos distintos quando a base tem o código do pedido (senão, linhas)
         daily = (grouped["order_id"].nunique() if "order_id" in df.columns else grouped.size()).astype(float)
-    full_range = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
+    last = max(daily.index.max(), pd.Timestamp(end).normalize()) if end is not None else daily.index.max()
+    full_range = pd.date_range(daily.index.min(), last, freq="D")
     return daily.reindex(full_range, fill_value=0.0).rename(metric)
 
 
@@ -111,9 +118,13 @@ def monthly_seasonality(series: pd.Series) -> pd.Series:
     """Índice de sazonalidade mensal: média diária do mês / média do ano (1,0 = típico).
 
     Cada ano é normalizado pela própria média, para não confundir crescimento
-    com sazonalidade. Exige ao menos um ano completo para ser representativo.
+    com sazonalidade. Só entram anos completos: a média de um ano parcial (ex.:
+    janeiro a agosto) não tem a alta temporada e distorceria o índice.
     """
     monthly = series.resample("MS").mean()
+    complete_years = monthly.groupby(monthly.index.year).transform("size") == 12
+    if complete_years.any():
+        monthly = monthly[complete_years]
     by_year = monthly.groupby(monthly.index.year).transform("mean")
     normalized = (monthly / by_year).dropna()
     index = normalized.groupby(normalized.index.month).mean()

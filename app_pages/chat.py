@@ -12,16 +12,28 @@ from insight_engine.ui import datasets
 from insight_engine.ui.ai_access import ai_access
 from insight_engine.ui.components import escape_currency, page_header, verified_message
 
-EXAMPLES = [
-    "Qual região teve a menor receita em 2025?",
-    "Por que a receita caiu no 3º trimestre de 2024?",
-    "Houve algum dia atípico em 2024?",
-    "Quanto devemos vender nos próximos 30 dias?",
-]
-
 AVATARS = {"user": ":material/person:", "assistant": ":material/insights:"}
 
+
+def example_questions(dataset) -> list[str]:
+    """Perguntas de exemplo com os anos que existem na base ativa."""
+    first, last = dataset.df["date"].min().year, dataset.df["date"].max().year
+    previous = last - 1 if first < last else last
+    why = (
+        "Por que a receita caiu no 3º trimestre de 2024?"  # queda plantada na base de exemplo
+        if datasets.is_example(dataset)
+        else "Quais categorias mais cresceram no último trimestre?"
+    )
+    return [
+        f"Qual região teve a menor receita em {last}?",
+        why,
+        f"Houve algum dia atípico em {previous}?",
+        "Quanto devemos vender nos próximos 30 dias?",
+    ]
+
+
 dataset = datasets.active_dataset()
+examples = example_questions(dataset)
 page_header(
     "Converse com os dados",
     "Pergunte em linguagem natural. A IA responde consultando funções de análise pré-definidas e "
@@ -38,11 +50,11 @@ if access.provider is None:
         icon=":material/key:",
     )
     with st.container(border=True):
-        st.markdown("**Exemplos do que você poderá perguntar:**\n" + "\n".join(f"- {q}" for q in EXAMPLES))
+        st.markdown("**Exemplos do que você poderá perguntar:**\n" + "\n".join(f"- {q}" for q in examples))
     st.stop()
 
 tools = SalesDataTools(dataset.df, has_cost=dataset.has_cost, has_customers=dataset.has_customers)
-state_key = f"chat_{dataset.name}"
+state_key = datasets.chat_state_key(dataset)
 conversation: list[tuple[ChatMessage, ChatTurn | None]] = st.session_state.setdefault(state_key, [])
 
 
@@ -81,9 +93,8 @@ if not conversation:
             "e previsão** desta base. Cada número da resposta vem de uma consulta aos dados, que você pode "
             "conferir em **Consultas feitas**."
         )
-        clicked = st.pills(
-            "Experimente perguntar", EXAMPLES, key=f"example_{len(conversation)}", label_visibility="visible"
-        )
+        # a chave inclui a base: senão a escolha feita em outra base dispararia a pergunta de novo aqui
+        clicked = st.pills("Experimente perguntar", examples, key=f"example_{state_key}", label_visibility="visible")
 question = st.chat_input("Pergunte sobre as vendas...", max_chars=MAX_QUESTION_CHARS) or clicked
 
 if conversation:

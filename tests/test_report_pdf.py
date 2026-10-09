@@ -28,3 +28,8 @@ def test_simbolos_fora_do_latin1_sao_convertidos():
     assert _safe("A — B “c” … 🔴") == 'A - B "c" ... '
     assert _safe("Ação ± 6,8%") == "Ação ± 6,8%"
     assert _safe("R$ 10,00") == "R$ 10,00"  # o valor não se separa do símbolo
+
+
+def test_sinal_de_menos_tipografico_nao_some():
+    assert _safe("Variação de −R$ 70 mil") == "Variação de -R$ 70 mil"
+    assert _safe("R$ 10 ≈ 9 €") == "R$ 10 ~ 9 EUR"

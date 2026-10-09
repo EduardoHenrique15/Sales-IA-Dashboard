@@ -66,6 +66,11 @@ def ai_access() -> AIAccess:
         shared = _global_limiter()
 
         def allow_call() -> bool:
-            return session.try_acquire() and shared.try_acquire()
+            if not session.try_acquire():
+                return False
+            if not shared.try_acquire():
+                session.release()  # recusada pelo limite global: não gasta a vaga do visitante
+                return False
+            return True
 
     return AIAccess(provider, error, uses_server_key, allow_call)

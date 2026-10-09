@@ -43,5 +43,5 @@ def decomposition(series: pd.Series) -> anomalies_mod.Decomposition:
 
 
 @st.cache_data(show_spinner="Segmentando clientes...", max_entries=16)
-def segmentation(df: pd.DataFrame) -> CustomerSegmentation:
-    return segment_customers(df)
+def segmentation(df: pd.DataFrame, reference_date: pd.Timestamp | None = None) -> CustomerSegmentation:
+    return segment_customers(df, reference_date=reference_date)

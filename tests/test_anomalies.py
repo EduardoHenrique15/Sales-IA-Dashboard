@@ -66,3 +66,18 @@ def test_dezembro_e_o_pico_sazonal_da_base_de_exemplo(sales_df):
     index = monthly_seasonality(daily_series(sales_df))
     assert index.idxmax() == "Dez"
     assert index["Dez"] > 1.3
+
+
+def test_serie_vai_ate_o_fim_da_base():
+    # um segmento que parou de vender tem dias zerados até o fim da base
+    df = pd.DataFrame({"date": pd.to_datetime(["2025-01-01", "2025-01-02"]), "revenue": [1.0, 2.0]})
+    assert daily_series(df, end=pd.Timestamp("2025-01-04 15:00")).tolist() == [1.0, 2.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match="Não há vendas"):
+        daily_series(df.iloc[0:0])
+
+
+def test_sazonalidade_mensal_ignora_ano_incompleto():
+    index = pd.date_range("2024-01-01", "2025-03-31", freq="D")
+    # 2024 completo e plano; 2025 só até março, com um janeiro atípico que distorceria o índice
+    series = pd.Series(np.where((index.year == 2025) & (index.month == 1), 500.0, 100.0), index=index)
+    assert monthly_seasonality(series).tolist() == pytest.approx([1.0] * 12)

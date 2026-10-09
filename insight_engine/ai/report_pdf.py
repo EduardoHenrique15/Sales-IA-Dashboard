@@ -21,6 +21,17 @@ _LEVEL_ORDER = {"alta": 0, "média": 1, "baixa": 2}
 _REPLACEMENTS = {
     "—": "-",
     "–": "-",
+    # sinal de menos tipográfico e hifens Unicode: removê-los inverteria o sinal ("−R$ 70 mil")
+    "−": "-",
+    "‐": "-",
+    "‑": "-",
+    "≈": "~",
+    "≥": ">=",
+    "≤": "<=",
+    "€": "EUR",
+    # espaços finos (comuns entre "R$" e o valor) viram espaço que não quebra linha
+    "\u202f": "\u00a0",
+    "\u2009": " ",
     "“": '"',
     "”": '"',
     "‘": "'",

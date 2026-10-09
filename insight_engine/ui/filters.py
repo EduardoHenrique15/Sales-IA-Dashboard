@@ -11,6 +11,7 @@ nunca quebre a página.
 
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 
 import pandas as pd
@@ -117,7 +118,7 @@ def segment_filter(df: pd.DataFrame, column: str, label: str, param: str, datase
     """Multiselect de categorias/regiões, iniciado pela URL e limitado às opções existentes."""
     options = sorted(df[column].unique())
     key = segment_key(param, dataset_key)
-    _seed(key, [v for v in st.query_params.get_all(param) if v in options])
+    _seed(key, list(dict.fromkeys(v for v in st.query_params.get_all(param) if v in options)))
     st.session_state[key] = [v for v in st.session_state[key] if v in options]
     values = sidebar_filters().multiselect(
         label, options=options, key=key, placeholder="Todas", persist_state="session"
@@ -183,7 +184,8 @@ def _preset_range(preset: str, min_date: date, max_date: date) -> tuple[date, da
     days = PRESETS.get(preset, PRESETS["90d"])[1]
     if days is None:
         return (min_date, max_date)
-    return (max(min_date, max_date - timedelta(days=days)), max_date)
+    # "30 dias" = os 30 últimos dias, incluindo o último
+    return (max(min_date, max_date - timedelta(days=days - 1)), max_date)
 
 
 def _valid_range(value, min_date: date, max_date: date) -> bool:
@@ -202,9 +204,10 @@ def _url_date(param: str, min_date: date, max_date: date) -> date | None:
 
 def _url_float(param: str) -> float:
     try:
-        return max(0.0, float(st.query_params.get(param, "0")))
+        value = float(st.query_params.get(param, "0"))
     except ValueError:
         return 0.0
+    return value if math.isfinite(value) and value > 0 else 0.0  # "inf" e "nan" também são float
 
 
 def _write_url(params: dict) -> None:

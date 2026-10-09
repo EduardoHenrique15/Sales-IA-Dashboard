@@ -135,3 +135,25 @@ class TestBuildSalesDataset:
         )
         dataset = build_sales_dataset(raw, guess_mapping(list(raw.columns)), "x.csv")
         assert dataset.df["revenue"].sum() == pytest.approx(sample["revenue"].sum())
+
+
+class TestFormatosComuns:
+    def test_ponto_de_milhar_sem_centavos(self):
+        assert parse_numbers(pd.Series(["R$ 1.500", "R$ 250"])).tolist() == [1500.0, 250.0]
+        assert parse_numbers(pd.Series(["1.500", "2.300.000"])).tolist() == [1500.0, 2300000.0]
+
+    def test_negativo_contabil(self):
+        assert parse_numbers(pd.Series(["(1.234,56)", "10,00"])).tolist() == [-1234.56, 10.0]
+
+    def test_data_com_ano_primeiro_e_barra(self):
+        parsed = parse_dates(pd.Series(["2025/03/01", "2025.12.31", "2025-01-02 10:30"]))
+        assert parsed.tolist() == [pd.Timestamp("2025-03-01"), pd.Timestamp("2025-12-31"), pd.Timestamp("2025-01-02")]
+
+    def test_data_serial_do_excel(self):
+        parsed = parse_dates(pd.Series(["45658", 45659]))
+        assert parsed.tolist() == [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")]
+
+    def test_planilha_com_datas_seriais(self):
+        df = pd.DataFrame({"data": [45658, 45659], "valor": [10.0, 20.0]})
+        dataset = build_sales_dataset(df, {"date": "data", "revenue": "valor"}, "planilha.xlsx")
+        assert dataset.df["date"].min() == pd.Timestamp("2025-01-01")

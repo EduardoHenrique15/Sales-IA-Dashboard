@@ -36,8 +36,8 @@ def test_pagina_de_vendas(app):
     assert not app.exception
     assert app.title[0].value == "Visão geral de vendas"
     assert app.metric[0].label == "Receita"
-    assert app.metric[0].value == "R$ 2.838.405"  # receita dos últimos 90 dias da base
-    assert app.metric[0].proto.delta == "+31,4%"
+    assert app.metric[0].value == "R$ 2.790.052"  # receita dos últimos 90 dias da base
+    assert app.metric[0].proto.delta == "+29,8%"
     assert [m.label for m in app.metric][2:] == ["Pedidos", "Ticket médio"]
     assert len(app.get("plotly_chart")) == 6  # evolução, composição (3) e variação (2)
     assert len(app.tabs) == 4
@@ -73,9 +73,9 @@ def test_atalho_de_periodo(app):
     app.sidebar.segmented_control[0].set_value("30d").run()
 
     assert not app.exception
-    assert "01/12/2025 a 31/12/2025" in main_captions(app)[0]
+    assert "02/12/2025 a 31/12/2025" in main_captions(app)[0]
     app.sidebar.segmented_control[0].set_value("custom").run()
-    assert app.sidebar.date_input[0].value == (date(2025, 12, 1), date(2025, 12, 31))
+    assert app.sidebar.date_input[0].value == (date(2025, 12, 2), date(2025, 12, 31))
 
 
 def test_agrupar_por_mes(app):
@@ -199,7 +199,7 @@ def test_relatorio_com_llm_mostra_a_checagem_de_numeros(app):
     from tests.helpers import FakeProvider
 
     report = ExecutiveReport(
-        headline="Receita de R$ 2.838.404,99.", highlights=["Meta de R$ 9 milhões."], risks=[], actions=[]
+        headline="Receita de R$ 2.790.051,94.", highlights=["Meta de R$ 9 milhões."], risks=[], actions=[]
     )
     with mock.patch("insight_engine.ui.ai_access.create_provider", return_value=(FakeProvider(report), None)):
         app.run()
@@ -239,6 +239,22 @@ def test_chat_com_provedor(app):
     assert any("confere com as consultas" in c.value for c in app.caption)
 
 
+def test_sugestao_do_chat_nao_dispara_de_novo_ao_trocar_de_base(app):
+    from tests.helpers import FakeProvider
+
+    provider = FakeProvider(script=[("text", "Resposta.")])
+    with mock.patch("insight_engine.ui.ai_access.create_provider", return_value=(provider, None)):
+        app.run()
+        app.switch_page("app_pages/chat.py").run()
+        app.pills[0].set_value(app.pills[0].options[0]).run()
+        assert [m.name for m in app.chat_message] == ["assistant", "user", "assistant"]
+        app.sidebar.radio[0].set_value("olist").run()
+
+    assert not app.exception
+    assert len(app.chat_message) == 1  # só a saudação: nenhuma pergunta foi feita na base nova
+    assert any("2018" in option for option in app.pills[0].options)  # exemplos com os anos da Olist
+
+
 def test_filtros_vem_da_url(app):
     app.query_params["de"] = "2024-07-01"
     app.query_params["ate"] = "2024-09-30"
@@ -258,11 +274,31 @@ def test_url_invalida_usa_o_padrao(app):
     app.query_params["ate"] = "data-ruim"
     app.query_params["categorias"] = ["Carros"]
     app.query_params["comparar"] = "xyz"
+    app.query_params["meta"] = "inf"
     app.run()
 
     assert not app.exception
-    assert "02/10/2025 a 31/12/2025" in main_captions(app)[0]
-    assert app.metric[0].value == "R$ 2.838.405"
+    assert "03/10/2025 a 31/12/2025" in main_captions(app)[0]
+    assert app.metric[0].value == "R$ 2.790.052"
+    assert not app.get("progress")  # meta infinita é ignorada
+
+
+def test_url_com_categoria_repetida(app):
+    app.query_params["categorias"] = ["Moda", "Moda"]
+    app.run()
+
+    assert not app.exception
+    assert app.sidebar.multiselect[0].value == ["Moda"]
+
+
+def test_periodo_sem_anterior_na_base_nao_e_comparado(app):
+    app.query_params["de"] = "2023-01-01"
+    app.query_params["ate"] = "2023-03-31"
+    app.run()
+
+    assert not app.exception
+    assert "sem comparação" in main_captions(app)[0]
+    assert not app.metric[0].proto.delta
 
 
 def test_comparacao_com_o_ano_anterior(app):

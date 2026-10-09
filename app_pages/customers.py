@@ -30,7 +30,8 @@ regions = filters.segment_filter(df_all, "region", "Regiões", filters.P_REGIONS
 df = df_all[df_all["region"].isin(regions)] if regions else df_all
 
 try:
-    seg = cached.segmentation(df)
+    # recência medida a partir do fim da base, também quando há filtro de região
+    seg = cached.segmentation(df, df_all["date"].max().normalize() + pd.Timedelta(days=1))
 except ValueError as exc:
     page_header("Análise de clientes", f"Base: {dataset.name}", icon=":material/groups:")
     st.warning(str(exc), icon=":material/warning:")

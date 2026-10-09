@@ -50,3 +50,27 @@ def test_aponta_numeros_que_nao_estao_nos_fatos(citation):
 def test_resumo_da_checagem():
     result = verify("Receita de R$ 2,84 milhões, margem de 36% e meta de R$ 900 mil.", FACTS)
     assert (result.checked, result.verified, result.unverified) == (3, 2, ["R$ 900 mil"])
+
+
+def test_hifen_de_lista_nao_e_sinal_negativo():
+    assert verify("- R$ 2.838.404,99 de receita\n- 2.431 pedidos", FACTS).ok
+
+
+def test_sinal_explicito_trocado_e_apontado():
+    # o fato é uma queda de 73%: "+73%" inverte o sentido
+    assert not verify("Os pedidos tiveram +73% no dia.", FACTS).ok
+    assert not verify("Crescimento de -31,4%.", FACTS).ok
+    assert verify("Queda de 73% e crescimento de +31,4%.", FACTS).ok
+    assert verify("Variação de −R$ 70.512,08.", FACTS).ok  # sinal de menos tipográfico
+
+
+@pytest.mark.parametrize(
+    ("citation", "ok"),
+    [("R$ 2,8 milhões", True), ("R$ 2.838 mil", True), ("R$ 2,9 milhões", False), ("R$ 3 milhões", False)],
+)
+def test_arredondamento_segue_as_casas_escritas(citation, ok):
+    assert verify(f"Receita de {citation}.", FACTS).ok is ok
+
+
+def test_numero_proximo_mas_nao_arredondado_e_apontado():
+    assert not verify("Receita de R$ 2.850.000.", FACTS).ok

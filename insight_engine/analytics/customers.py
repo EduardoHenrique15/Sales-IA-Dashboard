@@ -59,38 +59,48 @@ class CustomerSegmentation:
     reference_date: pd.Timestamp
 
 
-def segment_customers(df: pd.DataFrame, reference_date: pd.Timestamp | None = None) -> CustomerSegmentation:
-    """Calcula RFM, segmentos por regras e grupos do K-Means."""
-    rfm = rfm_table(df, reference_date)
+def segment_customers(
+    df: pd.DataFrame, reference_date: pd.Timestamp | None = None, with_clusters: bool = True
+) -> CustomerSegmentation:
+    """Calcula RFM, segmentos por regras e (com `with_clusters`) grupos do K-Means.
+
+    Sem `with_clusters`, pula o K-Means, que é a parte lenta em bases grandes (o
+    relatório e o chat só usam os segmentos RFM).
+    """
+    reference = pd.Timestamp(reference_date or df["date"].max().normalize() + pd.Timedelta(days=1))
+    rfm = rfm_table(df, reference)
     if len(rfm) < MIN_CUSTOMERS:
         raise ValueError(f"São necessários pelo menos {MIN_CUSTOMERS} clientes para a segmentação (há {len(rfm)}).")
-    reference = reference_date or df["date"].max() + pd.Timedelta(days=1)
 
     rfm = _add_scores(rfm)
     rfm["segment"] = _rfm_segment(rfm)
-    labels, silhouettes, best_k = _kmeans(rfm)
-    rfm["cluster"] = labels
+    clusters, silhouettes, best_k = pd.DataFrame(), pd.Series(dtype=float, name="silhouette"), 0
+    if with_clusters:
+        labels, silhouettes, best_k = _kmeans(rfm)
+        rfm["cluster"] = labels
+        clusters = _summarize_clusters(rfm)
 
     return CustomerSegmentation(
         customers=rfm,
         segments=_summarize_segments(rfm),
-        clusters=_summarize_clusters(rfm),
+        clusters=clusters,
         silhouette_by_k=silhouettes,
         best_k=best_k,
-        reference_date=pd.Timestamp(reference),
+        reference_date=reference,
     )
 
 
 def rfm_table(df: pd.DataFrame, reference_date: pd.Timestamp | None = None) -> pd.DataFrame:
     """Recência (dias), frequência (pedidos) e valor (receita) por cliente."""
     orders = df.dropna(subset=["customer_id"])
-    reference = reference_date or orders["date"].max() + pd.Timedelta(days=1)
+    # referência: o dia seguinte à última venda (recência em dias inteiros, mesmo com horário nas datas)
+    reference = reference_date or orders["date"].max().normalize() + pd.Timedelta(days=1)
     # frequência = pedidos distintos (um pedido pode ocupar mais de uma linha)
     frequency = ("order_id", "nunique") if "order_id" in orders.columns else ("date", "size")
     rfm = orders.groupby("customer_id").agg(
         last_purchase=("date", "max"), frequency=frequency, monetary=("revenue", "sum")
     )
-    rfm["recency"] = (reference - rfm["last_purchase"]).dt.days
+    rfm["recency"] = (reference - rfm["last_purchase"].dt.normalize()).dt.days
     return rfm[["recency", "frequency", "monetary"]]
 
 

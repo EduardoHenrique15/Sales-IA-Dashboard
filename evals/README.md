@@ -18,10 +18,11 @@ Uma resposta passa quando ([`scoring.py`](scoring.py)):
 | Critério | Como é conferido |
 |---|---|
 | Consulta certa | O chat chamou uma das consultas que respondem a pergunta |
-| Números corretos | Cada número esperado aparece no texto, aceitando arredondamento (`R$ 2,84 milhões` para 2.838.404,99) |
+| Números corretos | Cada número esperado aparece no texto, aceitando só o arredondamento das casas escritas (`R$ 2,84 milhões` para 2.838.404,99, mas não `R$ 2.850.000`). Quando a pergunta compara itens, cada número precisa estar na mesma linha ou frase que o nome do seu item (trocar a receita de Moda pela de Beleza reprova) |
 | Termos esperados | Nomes, meses e datas aparecem, sem diferenciar maiúsculas nem acentos |
 | Sem alucinação | Todo número citado aparece nos resultados das consultas (o mesmo verificador que roda no app) |
 | Nada proibido | Nem a chave de API nem trechos do prompt de sistema aparecem |
+| Robustez sem números | Nas perguntas sem resposta nos dados, a resposta não cita números (nem mesmo números reais da base) |
 
 **Relatório executivo** — 3 relatórios (trimestre vs trimestre anterior, trimestre vs ano anterior, ano
 inteiro): quantos saem no formato certo e quantos dos números citados são conferidos nos dados.
@@ -35,11 +36,13 @@ Precisa de `GEMINI_API_KEY` no `.env`. Cada modelo é avaliado sozinho, sem o mo
 ```bash
 python -m evals.run                                   # compara gemini-flash-latest e gemini-flash-lite-latest
 python -m evals.run --modelos gemini-flash-lite-latest # um modelo
-python -m evals.run --casos ontem,campeoes --refazer   # refaz perguntas específicas
+python -m evals.run --casos ontem campeoes --refazer   # refaz perguntas específicas
 ```
 
 Cada resposta é salva em `resultados/<modelo>.jsonl` assim que termina. Se a cota gratuita acabar no meio,
-rode de novo mais tarde: a avaliação continua de onde parou. O resumo vai para [`RESULTADOS.md`](RESULTADOS.md).
+rode de novo mais tarde: a avaliação continua de onde parou. O resumo vai para [`RESULTADOS.md`](RESULTADOS.md)
+e reúne todos os modelos já avaliados. As respostas guardadas são conferidas de novo contra o gabarito atual a
+cada rodada: se uma resposta certa mudar, o resultado antigo não continua aprovado por engano.
 
 Com a cota gratuita, use a pausa padrão entre chamadas (`--pausa 4`). Uma rodada completa com dois modelos faz
 cerca de 130 chamadas.

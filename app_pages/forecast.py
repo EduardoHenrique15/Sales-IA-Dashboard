@@ -37,7 +37,9 @@ if df.empty:
     st.warning("Nenhum dado para os filtros selecionados.", icon=":material/search_off:")
     st.stop()
 
-revenue = daily_series(df, "revenue")
+# até o fim da base: um segmento que parou de vender antes tem dias zerados no final
+data_end = df_all["date"].max()
+revenue = daily_series(df, "revenue", end=data_end)
 
 # ---------- PREVISÃO ----------
 with st.container(horizontal=True, vertical_alignment="bottom"):
@@ -123,7 +125,7 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
         help="O número de pedidos costuma ser o sinal mais confiável para incidentes: a receita oscila muito "
         "com poucos pedidos caros.",
     )
-series = daily_series(df, metric)
+series = daily_series(df, metric, end=data_end)
 try:
     found = cached.anomalies(series)
 except ValueError as exc:
