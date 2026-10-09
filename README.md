@@ -11,7 +11,10 @@ citado é conferido contra os dados**. Funciona com uma base sintética, com **9
 e-commerce brasileiro (Olist) ou com a sua planilha. Sem chave de IA, tudo continua funcionando com um motor
 estatístico local.
 
-**🔗 Demo:** _em breve (Streamlit Community Cloud)_
+[![Abrir o app](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://sales-ia-dashboard.streamlit.app)
+
+**🔗 App publicado:** [sales-ia-dashboard.streamlit.app](https://sales-ia-dashboard.streamlit.app) · direto nos
+[dados reais da Olist](https://sales-ia-dashboard.streamlit.app/?base=olist)
 
 ![Visão geral do dashboard](docs/img/visao-geral.png)
 
@@ -245,9 +248,16 @@ As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requ
 
 ## Deploy no Streamlit Community Cloud
 
+O app está publicado em [sales-ia-dashboard.streamlit.app](https://sales-ia-dashboard.streamlit.app). Para publicar a sua cópia:
+
 1. Em [share.streamlit.io](https://share.streamlit.io), crie um app a partir deste repositório, com `app.py`
    como arquivo principal e **Python 3.12** nas opções avançadas.
-2. Em **Secrets**, cole o conteúdo de `.streamlit/secrets.toml.example` com a sua chave.
+2. Em **Secrets**, cole o conteúdo de `.streamlit/secrets.toml.example` com a sua chave. Sem chave, o app
+   funciona igual e o relatório é escrito pelo motor estatístico local.
+
+Use uma chave criada em um projeto próprio do Google AI Studio: a cota gratuita do Gemini é por projeto, então o
+uso do app publicado não consome a cota do desenvolvimento local (e a chave pode ser revogada sozinha). Cada push
+no `main` atualiza o app automaticamente.
 
 Os limites de uso protegem a cota da chave do projeto contra visitantes; quem colar a própria chave no app usa
 a cota dela, sem limite.

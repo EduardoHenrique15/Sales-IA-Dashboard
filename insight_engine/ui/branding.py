@@ -8,9 +8,10 @@ from pathlib import Path
 
 APP_NAME = "Insight Engine"
 TAGLINE = "Dashboard executivo de vendas com IA"
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 AUTHOR = "Eduardo Henrique"
 GITHUB_URL = "https://github.com/EduardoHenrique15/Sales-IA-Dashboard"
+APP_URL = "https://sales-ia-dashboard.streamlit.app"
 
 _ASSETS = Path(__file__).resolve().parents[2] / "assets"
 LOGO = str(_ASSETS / "logo.svg")

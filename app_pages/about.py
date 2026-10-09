@@ -84,6 +84,7 @@ with st.container(border=True):
     )
     with st.container(horizontal=True):
         st.link_button("Código no GitHub", branding.GITHUB_URL, icon=":material/code:", type="primary")
+        st.link_button("App publicado", branding.APP_URL, icon=":material/public:")
         st.page_link("app_pages/sales.py", label="Abrir o dashboard", icon=":material/dashboard:")
         st.page_link("app_pages/upload.py", label="Usar meus dados", icon=":material/upload_file:")
 

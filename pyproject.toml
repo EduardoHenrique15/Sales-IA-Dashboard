@@ -1,6 +1,6 @@
 [project]
 name = "insight-engine"
-version = "0.7.0"
+version = "0.8.0"
 description = "Dashboard executivo de vendas com KPIs, gráficos interativos e relatórios gerados por IA."
 readme = "README.md"
 license = { file = "LICENSE" }

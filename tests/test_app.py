@@ -158,6 +158,7 @@ def test_pagina_sobre(app):
     assert not app.exception
     assert app.title[0].value == "Sobre o projeto"
     assert app.get("graphviz_chart")
+    assert "https://sales-ia-dashboard.streamlit.app" in [b.proto.url for b in app.get("link_button")]
 
 
 def test_base_enviada_sem_custo_nem_cliente(app, small_sales_df):
