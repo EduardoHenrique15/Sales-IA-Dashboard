@@ -63,7 +63,8 @@ def welcome() -> None:
         "- :material/trending_up: **Previsão** escolhida por backtesting e **detecção de anomalias**;\n"
         "- :material/groups: **Segmentação de clientes** com RFM e K-Means;\n"
         "- :material/auto_awesome: **Relatório executivo** e **chat** com IA, com os números conferidos.\n\n"
-        "Os dados iniciais são **sintéticos**. Use **Importar dados** para analisar a sua própria planilha."
+        "Comece pela base de exemplo (**sintética**) ou troque, na barra lateral, para **97 mil pedidos reais** "
+        "de e-commerce brasileiro (Olist). Em **Importar dados**, dá para analisar a sua própria planilha."
     )
     if st.button("Explorar o dashboard", type="primary", icon=":material/arrow_forward:", key="welcome_start"):
         st.rerun()

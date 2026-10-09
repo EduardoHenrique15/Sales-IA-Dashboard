@@ -7,7 +7,9 @@
 
 Transforma uma planilha de vendas em um painel executivo: indicadores, variação explicada, previsão,
 detecção de anomalias e segmentação de clientes — com um **relatório escrito por IA em que cada número
-citado é conferido contra os dados**. Sem chave de IA, tudo continua funcionando com um motor estatístico local.
+citado é conferido contra os dados**. Funciona com uma base sintética, com **97 mil pedidos reais** de um
+e-commerce brasileiro (Olist) ou com a sua planilha. Sem chave de IA, tudo continua funcionando com um motor
+estatístico local.
 
 **🔗 Demo:** _em breve (Streamlit Community Cloud)_
 
@@ -26,7 +28,7 @@ citado é conferido contra os dados**. Sem chave de IA, tudo continua funcionand
 | **Clientes** | Segmentos **RFM** com ação sugerida, comparados a grupos do **K-Means** escolhidos pelo coeficiente de silhueta. |
 | **Relatório com IA** | Gemini com **saída estruturada** (destaques, riscos por gravidade, ações por prioridade), exportável em PDF e Markdown. |
 | **Chat com os dados** | Perguntas em linguagem natural respondidas por **chamada de funções** seguras — a IA consulta, não executa código. |
-| **Seus dados** | Importação de CSV/Excel com mapeamento automático de colunas e números no formato brasileiro (`R$ 1.234,56`). |
+| **Dados** | Base sintética com gabarito (anomalias plantadas), **97 mil pedidos reais da Olist** ou a sua planilha CSV/Excel, com mapeamento automático de colunas e números no formato brasileiro (`R$ 1.234,56`). |
 
 <table>
   <tr>
@@ -38,6 +40,34 @@ citado é conferido contra os dados**. Sem chave de IA, tudo continua funcionand
     <td><img src="docs/img/clientes.png" alt="Segmentação RFM e mapa de calor"></td>
   </tr>
 </table>
+
+---
+
+## Dados reais: análise da Olist
+
+O [notebook de análise](notebooks/analise_olist.ipynb) explora os pedidos reais da Olist (2017–2018, dataset
+público do Kaggle) e testa neles os métodos do app:
+
+- **Entregar no prazo é o que mais pesa na satisfação.** Pedidos atrasados (6,7%) têm nota média **2,3**,
+  contra **4,3** dos entregues no prazo; o efeito é um degrau: qualquer atraso derruba a nota.
+- **O Nordeste é a região mais mal atendida:** o dobro de atrasos do Sudeste e frete 81% mais caro.
+- **97% dos clientes compram uma única vez.** Isso expôs um erro na segmentação RFM do app, que dava notas
+  diferentes a clientes empatados: 92% dos "Campeões" tinham comprado uma vez só. O método foi corrigido.
+- **O detector de anomalias encontrou a Black Friday (+505% de pedidos) e a greve dos caminhoneiros de maio de
+  2018** sem saber que esses eventos existiram.
+- **Em previsão, a métrica escolhe o vencedor:** o Holt-Winters erra menos dia a dia, mas o modelo ingênuo erra
+  menos no total do mês.
+
+<table>
+  <tr>
+    <td><img src="docs/img/olist-entrega.png" alt="Nota média da avaliação pelo atraso da entrega"></td>
+    <td><img src="docs/img/olist-anomalias.png" alt="Anomalias detectadas nos pedidos da Olist"></td>
+  </tr>
+</table>
+
+A preparação dos dados (janela de datas, cliente único, grupos de categoria) está documentada no notebook e em
+[`insight_engine/data/olist.py`](insight_engine/data/olist.py). No app, escolha **Olist** em "Base de dados", na
+barra lateral.
 
 ---
 
@@ -83,7 +113,8 @@ previsível — e é ele que importa para metas e estoque.
 **Anomalias validadas com gabarito.** A base sintética tem 3 anomalias plantadas (queda no checkout, campanha
 relâmpago, site fora do ar). Detectando em **pedidos por dia**, o método encontra **3 de 3** com 7 alertas em
 1.096 dias; em **receita**, só 1 de 3, porque poucos pedidos caros escondem o incidente. A lição virou padrão
-do app: pedidos é a métrica sugerida para incidentes.
+do app: pedidos é a métrica sugerida para incidentes. Nos dados reais da Olist, o mesmo método encontra a Black
+Friday e a greve dos caminhoneiros de 2018.
 
 **Segmentação que se valida.** RFM (regras de negócio) e K-Means (não supervisionado, k escolhido pela
 silhueta a partir de 3) chegam a grupos parecidos — os 20% melhores clientes concentram 68% da receita.
@@ -167,11 +198,14 @@ do navegador: não é salvo nem compartilhado.
 app.py                     # configuração, navegação e barra lateral comum
 app_pages/                 # uma página por arquivo (visão geral, previsão, clientes, chat, importação, sobre)
 insight_engine/
-├── data/                  # base sintética, importação de planilhas e validação (pandera)
+├── data/                  # base sintética, base da Olist, importação de planilhas e validação (pandera)
 ├── analytics/             # KPIs, períodos, PVM, tendência, previsão, anomalias, RFM/K-Means
 ├── ai/                    # contexto, prompts, relatório estruturado, verificador, chat, PDF, limites
 │   └── providers/         # interface LLMProvider + implementação do Gemini
 └── ui/                    # tema, gráficos, componentes, filtros e cache do Streamlit
+data/olist/                # pedidos reais da Olist, já preparados (parquet), com fonte e licença
+notebooks/                 # análise exploratória e de modelagem dos dados da Olist
+scripts/prepare_olist.py   # gera data/olist/ a partir dos CSVs originais do Kaggle
 evals/                     # avaliação da IA: perguntas com gabarito, pontuação e comparação de modelos
 tests/                     # testes unitários e de interface (rede bloqueada)
 .streamlit/config.toml     # tema claro/escuro, fonte e cores
@@ -195,6 +229,9 @@ mypy                       # tipos
 python -m evals.run        # avaliação da IA (precisa de GEMINI_API_KEY)
 ```
 
+Para abrir e reexecutar o notebook: `pip install matplotlib jupyterlab` e `jupyter lab notebooks/`. Para refazer
+as tabelas da Olist a partir dos CSVs do Kaggle: `python scripts/prepare_olist.py <pasta dos CSVs>`.
+
 As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requirements.txt` e
 `requirements-dev.txt`, geradas com [uv](https://github.com/astral-sh/uv) (o comando está no topo de cada arquivo).
 
@@ -214,7 +251,10 @@ a cota dela, sem limite.
 ## Limitações conhecidas
 
 - A base de exemplo é **sintética** (gerada com sazonalidade, tendência, ruído e anomalias plantadas): serve
-  para demonstrar o método, não descreve uma empresa real.
+  para validar os métodos com gabarito. A base da Olist é real, mas não informa custo, então lucro e margem
+  ficam indisponíveis nela.
+- O detector de anomalias só modela o padrão semanal: em dados reais, feriados (Natal, Ano-Novo) também viram
+  alertas. Um calendário de feriados é a próxima melhoria natural.
 - O chat precisa de uma chave do Gemini; o relatório funciona sem ela.
 - O limite por visitante vale por sessão (abrir outra aba recomeça a contagem); o limite diário total é o que
   protege a cota de fato.
@@ -225,8 +265,8 @@ a cota dela, sem limite.
 ## Stack
 
 Python · Streamlit · pandas · NumPy · Plotly · statsmodels · scikit-learn · SciPy · pandera · Pydantic ·
-Google Gemini (`google-genai`) · fpdf2 · pytest · ruff · mypy · GitHub Actions
+Google Gemini (`google-genai`) · fpdf2 · matplotlib · Jupyter · pytest · ruff · mypy · GitHub Actions
 
 ## Licença
 
-[MIT](LICENSE) — Eduardo Henrique
+Código: [MIT](LICENSE) — Eduardo Henrique. Dados da Olist: [CC BY-NC-SA 4.0](data/olist/README.md).

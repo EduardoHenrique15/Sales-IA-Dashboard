@@ -6,7 +6,7 @@ RFM descreve cada cliente por:
   - Frequência: número de pedidos;
   - Valor (Monetary): receita total gerada.
 
-1. Segmentos RFM: cada dimensão vira uma nota de 1 a 5 (quintis) e regras
+1. Segmentos RFM: cada dimensão vira uma nota de 1 a 5 (quintis, com empates na mesma nota) e regras
    clássicas de CRM nomeiam os segmentos ("Campeões", "Em risco"...), cada
    um com uma ação sugerida. É a visão fácil de explicar para o negócio.
 2. K-Means: agrupa os clientes pelas três métricas (em log e padronizadas),
@@ -85,8 +85,10 @@ def rfm_table(df: pd.DataFrame, reference_date: pd.Timestamp | None = None) -> p
     """Recência (dias), frequência (pedidos) e valor (receita) por cliente."""
     orders = df.dropna(subset=["customer_id"])
     reference = reference_date or orders["date"].max() + pd.Timedelta(days=1)
+    # frequência = pedidos distintos (um pedido pode ocupar mais de uma linha)
+    frequency = ("order_id", "nunique") if "order_id" in orders.columns else ("date", "size")
     rfm = orders.groupby("customer_id").agg(
-        last_purchase=("date", "max"), frequency=("date", "size"), monetary=("revenue", "sum")
+        last_purchase=("date", "max"), frequency=frequency, monetary=("revenue", "sum")
     )
     rfm["recency"] = (reference - rfm["last_purchase"]).dt.days
     return rfm[["recency", "frequency", "monetary"]]
@@ -101,11 +103,21 @@ def pareto_share(customers: pd.DataFrame, top_fraction: float = 0.2) -> float:
 
 def _add_scores(rfm: pd.DataFrame) -> pd.DataFrame:
     rfm = rfm.copy()
-    # rank(method="first") desempata valores iguais, para que os quintis fiquem bem definidos
-    rfm["r_score"] = pd.qcut(rfm["recency"].rank(method="first"), 5, labels=[5, 4, 3, 2, 1]).astype(int)
-    rfm["f_score"] = pd.qcut(rfm["frequency"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5]).astype(int)
-    rfm["m_score"] = pd.qcut(rfm["monetary"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5]).astype(int)
+    rfm["r_score"] = _quintile_score(-rfm["recency"])  # menos dias desde a compra = nota maior
+    rfm["f_score"] = _quintile_score(rfm["frequency"])
+    rfm["m_score"] = _quintile_score(rfm["monetary"])
     return rfm
+
+
+def _quintile_score(values: pd.Series) -> pd.Series:
+    """Nota de 1 a 5 pela posição (percentil) de cada valor.
+
+    Valores iguais recebem a mesma nota, a do início do empate. Desempatar pela ordem
+    das linhas daria notas diferentes a clientes idênticos: em bases reais, onde a
+    maioria compra uma vez só, clientes de uma única compra virariam "Campeões".
+    """
+    percentile = values.rank(method="min", pct=True)
+    return np.ceil(percentile * 5).clip(1, 5).astype(int)
 
 
 def _rfm_segment(rfm: pd.DataFrame) -> pd.Series:

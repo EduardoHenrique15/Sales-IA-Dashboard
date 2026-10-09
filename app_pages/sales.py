@@ -74,18 +74,31 @@ else:
     by_day = (
         df_filtered.set_index("date")
         .resample("D")
-        .agg(revenue=("revenue", "sum"), profit=("profit", "sum"), orders=("revenue", "size"))
+        .agg(
+            revenue=("revenue", "sum"),
+            profit=("profit", "sum"),
+            orders=("order_id", "nunique") if "order_id" in df_filtered.columns else ("revenue", "size"),
+        )
     )
-    # minigráficos: por dia em períodos de até um mês, por semana nos maiores (menos ruído)
-    trend = by_day if len(by_day) <= 31 else by_day.resample("W-MON", label="left", closed="left").sum()
+    # minigráficos: por dia em períodos de até um mês, por semana nos maiores (menos ruído). Só semanas
+    # completas: a semana parcial das pontas pareceria uma queda que não aconteceu.
+    if len(by_day) <= 31:
+        trend = by_day
+    else:
+        weekly = by_day.resample("W-MON", label="left", closed="left")
+        trend = weekly.sum()[weekly["revenue"].count() == 7]
 
     def points(values: pd.Series) -> list[float]:
         return [round(float(v), 2) for v in values.fillna(0)]
 
-    def change(now: float | None, before: float | None) -> str | None:
-        if now is None or not before:
-            return None
-        return format_pct((now - before) / abs(before) * 100, signed=True)
+    def change(now: float | None, before: float | None) -> dict:
+        """Variação para o `st.metric` (vazia sem base de comparação; neutra quando arredonda para zero)."""
+        if now is None or not before or not has_prev:
+            return {}
+        pct = (now - before) / abs(before) * 100
+        if round(pct, 1) == 0:
+            return {"delta": format_pct(0), "delta_color": "off", "delta_arrow": "off"}
+        return {"delta": format_pct(pct, signed=True)}
 
     prev = previous_kpis or SalesKPIs()
     has_prev = previous_kpis is not None
@@ -93,7 +106,7 @@ else:
     c1.metric(
         "Receita",
         format_brl(kpis.total_revenue, 0),
-        delta=change(kpis.total_revenue, prev.total_revenue) if has_prev else None,
+        **change(kpis.total_revenue, prev.total_revenue),
         delta_description=versus,
         border=True,
         chart_data=points(trend["revenue"]),
@@ -106,7 +119,7 @@ else:
         c2.metric(
             f"Lucro · margem {format_pct(kpis.margin_pct)}",
             format_brl(kpis.total_profit, 0),
-            delta=change(kpis.total_profit, prev.total_profit) if has_prev else None,
+            **change(kpis.total_profit, prev.total_profit),
             delta_description=versus,
             border=True,
             chart_data=points(trend["profit"]),
@@ -116,7 +129,7 @@ else:
     c3.metric(
         "Pedidos",
         format_number(kpis.n_orders),
-        delta=change(kpis.n_orders, prev.n_orders) if has_prev else None,
+        **change(kpis.n_orders, prev.n_orders),
         delta_description=versus,
         border=True,
         chart_data=points(trend["orders"]),
@@ -125,7 +138,7 @@ else:
     c4.metric(
         "Ticket médio",
         format_brl(kpis.avg_ticket),
-        delta=change(kpis.avg_ticket, prev.avg_ticket) if has_prev else None,
+        **change(kpis.avg_ticket, prev.avg_ticket),
         delta_description=versus,
         border=True,
         chart_data=points(trend["revenue"] / trend["orders"].where(trend["orders"] > 0)),

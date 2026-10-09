@@ -36,6 +36,11 @@ class SalesKPIs:
     revenue_by_region: pd.Series = field(default_factory=_empty_series)
 
 
+def count_orders(df: pd.DataFrame) -> int:
+    """Número de pedidos: códigos distintos quando a base os tem, senão uma linha = um pedido."""
+    return int(df["order_id"].nunique()) if "order_id" in df.columns else len(df)
+
+
 def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None) -> SalesKPIs:
     """Calcula os KPIs principais de vendas para o período filtrado.
 
@@ -46,7 +51,7 @@ def compute_sales_kpis(df: pd.DataFrame, previous_df: pd.DataFrame | None = None
         return SalesKPIs()
 
     total_revenue = float(df["revenue"].sum())
-    n_orders = len(df)
+    n_orders = count_orders(df)
 
     # Com custo ausente em algum pedido, lucro e margem ficam indisponíveis
     # em vez de subestimados.

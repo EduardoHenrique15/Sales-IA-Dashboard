@@ -78,8 +78,9 @@ with st.container(border=True):
     st.markdown(
         f"O **{branding.APP_NAME}** transforma uma planilha de vendas em um painel executivo: indicadores, "
         "variação explicada, previsão, anomalias e segmentação de clientes, com um relatório escrito por IA "
-        "em que cada número citado é conferido contra os dados. Sem chave de IA, tudo continua funcionando "
-        "com um motor estatístico local."
+        "em que cada número citado é conferido contra os dados. Funciona com uma base sintética (com anomalias "
+        "plantadas para validar os métodos), com 97 mil pedidos reais de e-commerce brasileiro (Olist) ou com a "
+        "planilha do usuário. Sem chave de IA, tudo continua funcionando com um motor estatístico local."
     )
     with st.container(horizontal=True):
         st.link_button("Código no GitHub", branding.GITHUB_URL, icon=":material/code:", type="primary")

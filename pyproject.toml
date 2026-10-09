@@ -30,6 +30,12 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+# para abrir e reexecutar o notebook de análise (notebooks/)
+notebook = [
+    "matplotlib>=3.8",
+    "jupyterlab>=4",
+    "nbclient>=0.10",
+]
 
 # ------------------------------------------------------------------
 # Ferramentas

@@ -180,6 +180,20 @@ def test_base_enviada_sem_custo_nem_cliente(app, small_sales_df):
     assert "não tem coluna de cliente" in app.info[0].value
 
 
+def test_base_real_da_olist(app):
+    app.run()
+    app.sidebar.radio[0].set_value("olist").run()
+
+    assert not app.exception
+    assert "Olist" in main_captions(app)[0]
+    assert app.metric[1].value == "—"  # a Olist não informa custo
+    assert any("Pedidos reais" in c.value for c in app.sidebar.caption)
+
+    app.switch_page("app_pages/customers.py").run()
+    assert not app.exception
+    assert app.metric[0].value == "94.046"  # clientes únicos, não um por pedido
+
+
 def test_relatorio_com_llm_mostra_a_checagem_de_numeros(app):
     from insight_engine.ai.report import ExecutiveReport
     from tests.helpers import FakeProvider

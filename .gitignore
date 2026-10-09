@@ -12,3 +12,6 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# CSVs originais da Olist (baixados do Kaggle; o repositório guarda só as tabelas preparadas)
+data/raw/

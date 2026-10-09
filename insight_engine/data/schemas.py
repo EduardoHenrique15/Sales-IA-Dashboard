@@ -27,6 +27,9 @@ SALES_SCHEMA = pa.DataFrameSchema(
         "profit": pa.Column(float, nullable=True),
         # opcional: nem toda base identifica o cliente
         "customer_id": pa.Column(str, nullable=True, required=False),
+        # opcional: quando um pedido ocupa mais de uma linha (ex.: itens de categorias diferentes),
+        # o código do pedido permite contar pedidos, e não linhas
+        "order_id": pa.Column(str, nullable=True, required=False),
     },
     coerce=True,
     strict="filter",  # colunas extras são descartadas

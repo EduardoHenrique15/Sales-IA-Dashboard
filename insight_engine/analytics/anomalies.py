@@ -60,7 +60,10 @@ class Decomposition:
 def daily_series(df: pd.DataFrame, metric: str = "revenue") -> pd.Series:
     """Série diária de `metric` ("revenue" ou "orders"), com zero nos dias sem venda."""
     grouped = df.groupby(df["date"].dt.normalize())
-    daily = grouped["revenue"].sum() if metric == "revenue" else grouped.size().astype(float)
+    if metric == "revenue":
+        daily = grouped["revenue"].sum()
+    else:  # pedidos distintos quando a base tem o código do pedido (senão, linhas)
+        daily = (grouped["order_id"].nunique() if "order_id" in df.columns else grouped.size()).astype(float)
     full_range = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
     return daily.reindex(full_range, fill_value=0.0).rename(metric)
 

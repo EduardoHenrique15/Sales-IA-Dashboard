@@ -5,8 +5,8 @@ from insight_engine.data.schemas import SALES_SCHEMA, DataValidationError, valid
 
 def test_base_valida_passa(small_sales_df):
     validated = validate(small_sales_df, SALES_SCHEMA, source="vendas")
-    # customer_id é opcional: a base mínima não tem essa coluna
-    assert list(validated.columns) == [c for c in SALES_SCHEMA.columns if c != "customer_id"]
+    # customer_id e order_id são opcionais: a base mínima não tem essas colunas
+    assert list(validated.columns) == [c for c in SALES_SCHEMA.columns if c not in ("customer_id", "order_id")]
 
 
 def test_custo_e_cliente_podem_faltar(small_sales_df):

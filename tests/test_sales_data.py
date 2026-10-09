@@ -15,7 +15,8 @@ def test_base_e_deterministica(sales_df):
 
 
 def test_base_respeita_o_esquema(sales_df):
-    assert list(sales_df.columns) == list(SALES_SCHEMA.columns)
+    # order_id é opcional: na base sintética, cada linha já é um pedido
+    assert list(sales_df.columns) == [c for c in SALES_SCHEMA.columns if c != "order_id"]
     assert (sales_df[["units", "unit_price", "revenue", "cost"]] >= 0).all().all()
     assert set(sales_df["category"]) == set(sales.CATEGORIES)
     assert set(sales_df["region"]) == set(sales.REGIONS)
