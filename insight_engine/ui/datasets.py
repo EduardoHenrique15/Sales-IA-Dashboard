@@ -2,7 +2,8 @@
 Escolha da base de vendas ativa: exemplo (sintética) ou arquivo enviado.
 
 A base enviada fica só na sessão do navegador (`st.session_state`): não é
-gravada em disco nem compartilhada com outros usuários.
+gravada em disco nem compartilhada com outros usuários. A escolha da Olist
+vai para a URL (`?base=olist`), para que um link compartilhado abra na mesma base.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ from insight_engine.ui.layout import sidebar_filters
 UPLOAD_STATE = "uploaded_dataset"
 CHOICE_STATE = "dataset_choice"
 EXAMPLE, OLIST, UPLOADED = "exemplo", "olist", "upload"
+# parâmetro da URL com a base escolhida (só as bases públicas podem ir num link)
+P_BASE = "base"
+SHAREABLE = {EXAMPLE, OLIST}
 EXAMPLE_NAME = "Base de exemplo (sintética)"
 DESCRIPTIONS = {
     EXAMPLE: "Dados sintéticos de 2023 a 2025, com anomalias plantadas de propósito para validar os métodos.",
@@ -83,6 +87,9 @@ def active_dataset() -> SalesDataset:
     if uploaded is not None:
         names[UPLOADED] = f"Meu arquivo: {uploaded.name}"
 
+    # primeira visita: a base vem do link compartilhado (?base=olist), se houver
+    if CHOICE_STATE not in st.session_state and st.query_params.get(P_BASE) in SHAREABLE.intersection(names):
+        st.session_state[CHOICE_STATE] = st.query_params[P_BASE]
     current = st.session_state.get(CHOICE_STATE, UPLOADED if uploaded is not None else EXAMPLE)
     if current not in names:
         current = EXAMPLE
@@ -100,6 +107,11 @@ def active_dataset() -> SalesDataset:
         key="_dataset_choice_widget",
         on_change=remember,
     )
+    # a base entra no link compartilhado; a de exemplo é o padrão e o arquivo enviado só existe nesta sessão
+    if choice == OLIST:
+        st.query_params[P_BASE] = OLIST
+    else:
+        st.query_params.pop(P_BASE, None)
     if choice == UPLOADED and uploaded is not None:
         return uploaded
     area.caption(DESCRIPTIONS[choice] + ("" if uploaded else " Envie a sua em **Importar dados**."))

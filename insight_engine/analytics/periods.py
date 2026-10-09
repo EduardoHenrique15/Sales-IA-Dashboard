@@ -64,7 +64,11 @@ def comparison_window(start, end, comparison: str = "anterior") -> tuple[pd.Time
     """(início, fim) do período de comparação, em dias inteiros."""
     start_ts, end_ts = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
     if comparison == "ano_anterior":
-        return start_ts - pd.DateOffset(years=1), end_ts - pd.DateOffset(years=1)
+        prev_end = end_ts - pd.DateOffset(years=1)
+        if end_ts.is_month_end:
+            # fim de mês continua fim de mês: fevereiro de 2025 se compara com 01 a 29/02/2024
+            prev_end += pd.offsets.MonthEnd(0)
+        return start_ts - pd.DateOffset(years=1), prev_end
     prev_end = start_ts - pd.Timedelta(days=1)
     return prev_end - (end_ts - start_ts), prev_end
 

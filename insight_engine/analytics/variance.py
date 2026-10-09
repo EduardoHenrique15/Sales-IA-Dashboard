@@ -38,11 +38,10 @@ class RevenueBridge:
 
 def revenue_bridge(current: pd.DataFrame, previous: pd.DataFrame, segment: str = "category") -> RevenueBridge:
     """Decompõe a variação de receita entre dois períodos por `segment`."""
-    if current.empty or previous.empty:
-        raise ValueError("Os dois períodos precisam ter vendas para a análise de variação.")
-
     cur = _aggregate(current, segment)
     prev = _aggregate(previous, segment)
+    if cur.empty or prev.empty:
+        raise ValueError("Os dois períodos precisam ter vendas para a análise de variação.")
     table = cur.join(prev, how="outer", lsuffix="_1", rsuffix="_0").fillna({"revenue_1": 0.0, "revenue_0": 0.0})
     table[["units_1", "units_0"]] = table[["units_1", "units_0"]].fillna(0.0)
 
@@ -75,5 +74,8 @@ def revenue_bridge(current: pd.DataFrame, previous: pd.DataFrame, segment: str =
 
 
 def _aggregate(df: pd.DataFrame, segment: str) -> pd.DataFrame:
-    grouped = df.groupby(segment).agg(revenue=("revenue", "sum"), units=("units", "sum"))
+    # Venda sem quantidade informada (0) conta como 1 unidade, como no preço unitário da
+    # importação: descartá-la tiraria a receita dela da ponte, que deixaria de somar a variação.
+    units = df["units"].where(df["units"] > 0, (df["revenue"] > 0).astype(int))
+    grouped = df.assign(units=units).groupby(segment).agg(revenue=("revenue", "sum"), units=("units", "sum"))
     return grouped[grouped["units"] > 0].astype(float)

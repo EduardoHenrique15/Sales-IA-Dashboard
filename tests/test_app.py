@@ -194,6 +194,28 @@ def test_base_real_da_olist(app):
     assert app.metric[0].value == "94.046"  # clientes únicos, não um por pedido
 
 
+def test_link_compartilhado_abre_na_base_da_olist(app):
+    app.query_params["base"] = "olist"
+    app.run()
+
+    assert not app.exception
+    assert app.sidebar.radio[0].value == "olist"
+    assert "Olist" in main_captions(app)[0]
+
+    app.switch_page("app_pages/forecast.py").run()  # a escolha vale nas outras páginas
+    assert not app.exception
+    assert app.sidebar.radio[0].value == "olist"
+
+    app.sidebar.radio[0].set_value("exemplo").run()
+    assert "base" not in app.query_params  # a base de exemplo é o padrão: fica fora do link
+
+
+def test_escolha_da_base_vai_para_a_url(app):
+    app.run()
+    app.sidebar.radio[0].set_value("olist").run()
+    assert app.query_params["base"] == "olist"
+
+
 def test_relatorio_com_llm_mostra_a_checagem_de_numeros(app):
     from insight_engine.ai.report import ExecutiveReport
     from tests.helpers import FakeProvider

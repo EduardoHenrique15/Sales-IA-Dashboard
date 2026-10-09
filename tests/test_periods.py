@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from insight_engine.analytics.periods import (
     SalesFilters,
@@ -93,3 +94,18 @@ def test_folga_para_base_que_comeca_alguns_dias_depois():
     assert window_is_covered("2017-01-01", "2017-08-21", pd.Timestamp("2017-01-05 10:00"))
     # um ano inteiro que começa 4 meses antes da base, não
     assert not window_is_covered("2016-09-01", "2017-08-31", pd.Timestamp("2017-01-05"))
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected"),
+    [
+        ("2025-02-01", "2025-02-28", ("2024-02-01", "2024-02-29")),  # o mês inteiro, com o dia 29
+        ("2024-02-01", "2024-02-29", ("2023-02-01", "2023-02-28")),
+        ("2024-02-29", "2024-02-29", ("2023-02-28", "2023-02-28")),
+        ("2024-02-10", "2024-02-28", ("2023-02-10", "2023-02-28")),  # 28/02/2024 não é fim de mês
+        ("2025-01-01", "2025-12-31", ("2024-01-01", "2024-12-31")),
+    ],
+)
+def test_ano_anterior_com_29_de_fevereiro(start, end, expected):
+    window = comparison_window(as_date(start), as_date(end), "ano_anterior")
+    assert window == (pd.Timestamp(expected[0]), pd.Timestamp(expected[1]))

@@ -122,7 +122,8 @@ silhueta a partir de 3) chegam a grupos parecidos — os 20% melhores clientes c
 
 **Engenharia.**
 - Mais de 200 testes automatizados (pytest), incluindo a interface com `AppTest`, cobertura mínima de 90%.
-- CI no GitHub Actions em Python 3.11 e 3.12, com ruff (lint e formatação) e mypy.
+- CI no GitHub Actions em Python 3.11 e 3.12, com ruff (lint e formatação) e mypy; o notebook de análise é
+  reexecutado do zero a cada push, para não ficar desatualizado em relação ao código.
 - Testes **nunca** usam chaves reais nem internet: qualquer conexão de saída é bloqueada.
 - Validação de dados com pandera; saída da IA validada com Pydantic; dependências travadas com `uv`.
 
@@ -234,11 +235,11 @@ mypy                       # tipos
 python -m evals.run        # avaliação da IA (precisa de GEMINI_API_KEY)
 ```
 
-Para abrir e reexecutar o notebook: `pip install matplotlib jupyterlab` e `jupyter lab notebooks/`. Para refazer
+Para abrir e reexecutar o notebook: `pip install -r requirements-notebook.txt` e `jupyter lab notebooks/`. Para refazer
 as tabelas da Olist a partir dos CSVs do Kaggle: `python scripts/prepare_olist.py <pasta dos CSVs>`.
 
-As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requirements.txt` e
-`requirements-dev.txt`, geradas com [uv](https://github.com/astral-sh/uv) (o comando está no topo de cada arquivo).
+As dependências diretas ficam no `pyproject.toml`; as versões exatas, em `requirements.txt`,
+`requirements-dev.txt` e `requirements-notebook.txt`, geradas com [uv](https://github.com/astral-sh/uv) (o comando está no topo de cada arquivo).
 
 ---
 

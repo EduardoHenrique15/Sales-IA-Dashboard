@@ -168,7 +168,12 @@ def build_sales_facts(
         except ValueError:
             logger.info("Clientes insuficientes para a segmentação")
 
-    bridge = revenue_bridge(period, previous) if not period.empty and not previous.empty else None
+    bridge = None
+    if not period.empty and not previous.empty:
+        try:
+            bridge = revenue_bridge(period, previous)
+        except ValueError:  # um dos períodos só tem vendas sem receita
+            logger.info("Sem vendas com receita para a análise de variação")
 
     return SalesFacts(
         period_label=period_label,

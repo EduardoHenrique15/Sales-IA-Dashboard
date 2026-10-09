@@ -8,7 +8,7 @@ import streamlit as st
 from insight_engine.ai.context import build_sales_facts
 from insight_engine.analytics.kpis import SalesKPIs, compute_sales_kpis
 from insight_engine.analytics.periods import apply_segments, comparison_is_complete, comparison_window, filter_sales
-from insight_engine.analytics.variance import revenue_bridge
+from insight_engine.analytics.variance import RevenueBridge, revenue_bridge
 from insight_engine.formatting import format_brl, format_number, format_pct
 from insight_engine.ui import charts, datasets, filters
 from insight_engine.ui.components import chart_card, escape_currency, page_header, report_section
@@ -41,6 +41,15 @@ previous_kpis = compute_sales_kpis(df_prev) if not df_prev.empty else None
 comparison = selection.comparison_label
 comparison_complete = comparison_is_complete(df_all, selection)
 versus = "vs ano anterior" if selection.comparison == "ano_anterior" else "vs anterior"
+
+
+def _bridge(current: pd.DataFrame, previous: pd.DataFrame) -> RevenueBridge | None:
+    """Ponte de receita, ou None quando um dos períodos não tem vendas com receita."""
+    try:
+        return revenue_bridge(current, previous)
+    except ValueError:
+        return None
+
 
 # ---------- CABEÇALHO ----------
 comparison_note = (
@@ -226,10 +235,9 @@ else:
                 "tamanhos diferentes: escolha um período mais curto ou outra base de comparação.",
                 icon=":material/info:",
             )
-        elif previous_kpis is None:
+        elif (bridge := _bridge(df_filtered, df_prev)) is None:
             st.info(f"Não há vendas no {comparison} para comparar.", icon=":material/info:")
         else:
-            bridge = revenue_bridge(df_filtered, df_prev)
             st.markdown(
                 escape_currency(
                     f"Em relação ao {comparison}, a receita variou **{format_brl(bridge.total_change)}**. "

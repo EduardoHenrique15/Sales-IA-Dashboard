@@ -54,3 +54,17 @@ def test_efeitos_somam_a_variacao_na_base_real(sales_df):
 def test_periodo_vazio():
     with pytest.raises(ValueError):
         revenue_bridge(frame([("A", 1.0, 1)]), frame([]))
+
+
+def test_venda_sem_quantidade_nao_some_da_ponte():
+    # a categoria B tem receita mas quantidade 0 (comum em planilhas): conta como 1 unidade
+    previous = frame([("A", 100.0, 10), ("B", 50.0, 0)])
+    current = frame([("A", 150.0, 10), ("B", 80.0, 0)])
+    bridge = revenue_bridge(current, previous)
+    assert (bridge.previous_revenue, bridge.current_revenue) == (150.0, 230.0)
+    assert bridge.volume_effect + bridge.price_effect + bridge.mix_effect == pytest.approx(80)
+
+
+def test_periodo_sem_receita_nem_quantidade():
+    with pytest.raises(ValueError, match="precisam ter vendas"):
+        revenue_bridge(frame([("A", 100.0, 1)]), frame([("A", 0.0, 0)]))

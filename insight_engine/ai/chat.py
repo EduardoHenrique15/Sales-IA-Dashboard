@@ -243,9 +243,10 @@ class SalesDataTools:
         start, end = self._period(data_inicio, data_fim)
         df = self._segment(categorias, regioes)
         current, previous = self._slice(df, start, end), self._previous(df, start, end)
-        if current.empty or previous.empty:
+        try:
+            bridge = revenue_bridge(current, previous)
+        except ValueError:
             return {"erro": "Não há vendas no período ou no período anterior para comparar."}
-        bridge = revenue_bridge(current, previous)
         return {
             "receita_periodo_anterior": format_brl(bridge.previous_revenue),
             "receita_periodo": format_brl(bridge.current_revenue),
